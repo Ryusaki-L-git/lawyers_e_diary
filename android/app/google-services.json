@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "571288974875",
+    "project_id": "lawyer-s-e-diary",
+    "storage_bucket": "lawyer-s-e-diary.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:571288974875:android:4aeb978e158894aabfeabe",
+        "android_client_info": {
+          "package_name": "com.example.lawyers_e_diary"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlvBHarcu63kgGO-AJf-qU49n25rD5gUw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
