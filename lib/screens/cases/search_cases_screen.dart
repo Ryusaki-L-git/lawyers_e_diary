@@ -5,7 +5,7 @@ import '../../models/case_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/app_nav_controller.dart';
-import '../../widgets/calendar_components.dart';
+import '../../widgets/calendar_components.dart' hide CaseCard;
 import '../../widgets/case_card.dart';
 import '../../widgets/case_empty_state.dart';
 import '../../widgets/case_filter_sheet.dart';

@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../models/case_model.dart';
+import '../models/fee_model.dart';
+import '../models/reminder_model.dart';
 
 class CaseStats {
   const CaseStats({
@@ -215,6 +217,18 @@ class FirestoreService {
     }
   }
 
+  /// Toggles star/pin status of a case.
+  Future<void> toggleCaseStarred(String caseId, bool isStarred) async {
+    try {
+      await _db.collection('cases').doc(caseId).update({
+        'isStarred': isStarred,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error toggling case starred: $e');
+    }
+  }
+
   /// Stream firm team members for the Cause List team switcher and transfer screen.
   Stream<List<TeamMemberModel>> getTeamMembers() {
     return _db.collection('users').snapshots().map((snapshot) {
@@ -288,6 +302,7 @@ class FirestoreService {
     String? caseType,
     DateTime? nextHearingDate,
     String? clientPhone,
+    String? initialNote,
   }) async {
     try {
       String? uid = _auth.currentUser?.uid;
@@ -296,7 +311,7 @@ class FirestoreService {
         return null;
       }
 
-      DocumentReference doc = await _db.collection('cases').add({
+      final Map<String, dynamic> caseData = {
         'userId': uid,
         'caseTitle': caseTitle,
         'clientName': clientName,
@@ -307,11 +322,20 @@ class FirestoreService {
         'caseType': caseType ?? 'Civil Case',
         'handledBy': _auth.currentUser?.displayName ?? 'Advocate',
         'clientPhone': clientPhone,
-        if (nextHearingDate != null)
-          'nextHearingDate': Timestamp.fromDate(nextHearingDate),
+        'isStarred': false,
+        'documents': <dynamic>[],
+        'notes': (initialNote != null && initialNote.trim().isNotEmpty)
+            ? <String>[initialNote.trim()]
+            : <String>[],
         'createdAt': FieldValue.serverTimestamp(),
         'lastUpdated': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (nextHearingDate != null) {
+        caseData['nextHearingDate'] = Timestamp.fromDate(nextHearingDate);
+      }
+
+      DocumentReference doc = await _db.collection('cases').add(caseData);
 
       return doc.id;
     } catch (e) {
@@ -336,6 +360,204 @@ class FirestoreService {
       });
     } catch (e) {
       debugPrint("Error adding note: $e");
+    }
+  }
+
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // REMINDERS â€” Phase 1
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+  /// Live stream of all reminders for the current user, ordered by dueDateTime.
+  /// Pass [showCompleted] = true to include completed reminders.
+  Stream<List<ReminderModel>> watchReminders({bool showCompleted = false}) {
+    final uid = currentUserId;
+    if (uid == null) return const Stream.empty();
+
+    Query<Map<String, dynamic>> query = _db
+        .collection('reminders')
+        .where('userId', isEqualTo: uid)
+        .orderBy('dueDateTime');
+
+    if (!showCompleted) {
+      query = query.where('isCompleted', isEqualTo: false);
+    }
+
+    return query.snapshots().map(
+          (snap) =>
+              snap.docs.map((d) => ReminderModel.fromFirestore(d)).toList(),
+        );
+  }
+
+  /// Adds a new reminder for the current user. Returns the new document ID.
+  Future<String?> addReminder({
+    required String title,
+    required DateTime dueDateTime,
+    String? description,
+    String? caseId,
+    String? caseTitle,
+    String? clientName,
+    ReminderRepeat repeatRule = ReminderRepeat.none,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null) {
+      debugPrint('addReminder: No user signed in');
+      return null;
+    }
+    try {
+      final data = ReminderModel(
+        id: '',
+        userId: uid,
+        title: title,
+        dueDateTime: dueDateTime,
+        description: description,
+        caseId: caseId,
+        caseTitle: caseTitle,
+        clientName: clientName,
+        repeatRule: repeatRule,
+      ).toMap();
+
+      final ref = await _db.collection('reminders').add(data);
+      return ref.id;
+    } catch (e) {
+      debugPrint('Error adding reminder: $e');
+      return null;
+    }
+  }
+
+  /// Toggles the `isCompleted` field on a reminder.
+  Future<void> toggleReminderDone(String reminderId, bool currentValue) async {
+    try {
+      await _db.collection('reminders').doc(reminderId).update({
+        'isCompleted': !currentValue,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error toggling reminder: $e');
+    }
+  }
+
+  /// Permanently deletes a reminder document.
+  Future<void> deleteReminder(String reminderId) async {
+    try {
+      await _db.collection('reminders').doc(reminderId).delete();
+    } catch (e) {
+      debugPrint('Error deleting reminder: $e');
+    }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // FEE CALCULATOR — Phase 2
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  /// Live stream of all fee records for the current user, newest first.
+  Stream<List<FeeModel>> watchFees() {
+    final uid = currentUserId;
+    if (uid == null) return const Stream.empty();
+
+    return _db
+        .collection('fees')
+        .where('userId', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => FeeModel.fromFirestore(d)).toList());
+  }
+
+  /// Creates a new fee record. Returns the new document ID.
+  Future<String?> addFee({
+    required String clientName,
+    required String caseTitle,
+    required List<FeeLineItem> services,
+    String? caseId,
+    double? agreedTotal,
+    String? notes,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null) {
+      debugPrint('addFee: No user signed in');
+      return null;
+    }
+    try {
+      final total = agreedTotal ?? services.fold<double>(0.0, (s, i) => s + i.subtotal);
+      final ref = await _db.collection('fees').add(
+        FeeModel(
+          id: '',
+          userId: uid,
+          clientName: clientName,
+          caseTitle: caseTitle,
+          caseId: caseId,
+          services: services,
+          agreedTotal: total,
+          notes: notes,
+        ).toMap(),
+      );
+      return ref.id;
+    } catch (e) {
+      debugPrint('Error adding fee: $e');
+      return null;
+    }
+  }
+
+  /// Records a payment against a fee, updating collected total and status.
+  Future<void> recordFeePayment({
+    required String feeId,
+    required double amount,
+    required double newCollectedTotal,
+    required double agreedTotal,
+    String paymentMode = 'Cash',
+    String? receiptNumber,
+  }) async {
+    try {
+      final batch = _db.batch();
+      final txRef = _db.collection('fees').doc(feeId).collection('transactions').doc();
+      batch.set(txRef, {
+        'amount': amount,
+        'paymentDate': FieldValue.serverTimestamp(),
+        'paymentMode': paymentMode,
+        // ignore: use_null_aware_elements
+        if (receiptNumber != null) 'receiptNumber': receiptNumber,
+      });
+      final newPending = (agreedTotal - newCollectedTotal).clamp(0.0, double.infinity);
+      final newStatus = newPending <= 0 ? FeeStatus.settled.value : FeeStatus.partiallyPaid.value;
+      batch.update(_db.collection('fees').doc(feeId), {
+        'collectedTotal': newCollectedTotal,
+        'pendingTotal': newPending,
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Error recording fee payment: $e');
+    }
+  }
+
+  /// Fetches all payment transactions for a specific fee.
+  Future<List<FeeTransaction>> fetchFeeTransactions(String feeId) async {
+    try {
+      final snap = await _db
+          .collection('fees')
+          .doc(feeId)
+          .collection('transactions')
+          .orderBy('paymentDate', descending: true)
+          .get();
+      return snap.docs.map((d) => FeeTransaction.fromMap(d.id, d.data())).toList();
+    } catch (e) {
+      debugPrint('Error fetching fee transactions: $e');
+      return [];
+    }
+  }
+
+  /// Deletes a fee record and all its subcollection transactions.
+  Future<void> deleteFee(String feeId) async {
+    try {
+      final txSnap = await _db.collection('fees').doc(feeId).collection('transactions').get();
+      final batch = _db.batch();
+      for (final doc in txSnap.docs) {
+        batch.delete(doc.reference);
+      }
+      batch.delete(_db.collection('fees').doc(feeId));
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Error deleting fee: $e');
     }
   }
 }

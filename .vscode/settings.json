@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd \"c:/Users/Zafarullah khan/lawyers_e_diary\" ; flutter analyze$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

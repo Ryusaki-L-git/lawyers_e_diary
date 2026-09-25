@@ -11,6 +11,16 @@ abstract final class AppPalette {
   static const softGold = Color(0xFFE6C77E);
   static const border = Color(0xFFE6DED0);
   static const unread = Color(0xFFE46D52);
+
+  // Canonical Modern Legal Editorial tokens
+  static const canvas = Color(0xFFF7F5F2);
+  static const primaryGreen = Color(0xFF1F3D2B);
+  static const deepGreen = Color(0xFF13382E);
+  static const accentGold = Color(0xFFCCA046);
+  static const textPrimary = Color(0xFF1A1A1A);
+  static const textMuted = Color(0xFF6B665E);
+  static const cardBackground = Color(0xFFFFFFFF);
+  static const borderLight = Color(0xFFE5DFD7);
 }
 
 abstract final class AppTheme {

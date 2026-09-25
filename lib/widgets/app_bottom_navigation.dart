@@ -1,9 +1,10 @@
+
 import 'package:flutter/material.dart';
 
 import 'app_nav_controller.dart';
 
-class _NavItemConfig {
-  const _NavItemConfig({
+class NavItemConfig {
+  const NavItemConfig({
     required this.label,
     required this.icon,
     required this.route,
@@ -14,9 +15,12 @@ class _NavItemConfig {
   final String route;
 }
 
-/// Unified, morphing bottom navigation bar supporting both Home Mode (5 tabs)
-/// and Case Section Mode (4 tabs: Search, Cases, Case Management, Home).
-/// Includes smooth 200ms sliding gold indicator and zero-flicker transitions.
+/// Unified premium bottom navigation bar supporting both:
+/// - Home Mode: Home, Calendar, Cases, Juris, Profile
+/// - Case Section Mode: Search, Cases, Case Management, Home
+///
+/// Navigation behavior is preserved while the visual system uses a restrained
+/// premium treatment with a subtle active indicator and smooth transitions.
 class AppBottomNavigation extends StatelessWidget {
   const AppBottomNavigation({
     super.key,
@@ -29,74 +33,167 @@ class AppBottomNavigation extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<String>? onNavigate;
 
-  static const Color navBackground = Color(0xFF13382E);
-  static const Color gold = Color(0xFFCCA046);
-  static const Color inactiveIcon = Color(0xFF9EABA4);
+  // ---------------------------------------------------------------------------
+  // Navigation palette
+  // ---------------------------------------------------------------------------
 
-  static const List<_NavItemConfig> homeTabs = [
-    _NavItemConfig(label: 'Home', icon: Icons.home_rounded, route: '/home'),
-    _NavItemConfig(label: 'Calendar', icon: Icons.calendar_month_outlined, route: '/calendar'),
-    _NavItemConfig(label: 'Cases', icon: Icons.business_center_outlined, route: '/cases'),
-    _NavItemConfig(label: 'Juris', icon: Icons.auto_awesome_outlined, route: '/juris'),
-    _NavItemConfig(label: 'Profile', icon: Icons.person_outline_rounded, route: '/profile'),
+  static const Color navBackground = Color(0xFF111916);
+  static const Color navSurface = Color(0xFF17211D);
+
+  static const Color gold = Color(0xFFD1AD5A);
+  static const Color goldSoft = Color(0x66D1AD5A);
+
+  static const Color activeText = Color(0xFFF0E7D2);
+  static const Color inactiveIcon = Color(0xFF8E9893);
+  static const Color inactiveText = Color(0xFF8E9893);
+
+  // ---------------------------------------------------------------------------
+  // Home Mode
+  // ---------------------------------------------------------------------------
+
+  static const List<NavItemConfig> homeTabs = [
+    NavItemConfig(
+      label: 'Home',
+      icon: Icons.home_rounded,
+      route: '/home',
+    ),
+    NavItemConfig(
+      label: 'Calendar',
+      icon: Icons.calendar_month_outlined,
+      route: '/calendar',
+    ),
+    NavItemConfig(
+      label: 'Cases',
+      icon: Icons.business_center_outlined,
+      route: '/cases',
+    ),
+    NavItemConfig(
+      label: 'Juris',
+      icon: Icons.auto_awesome_outlined,
+      route: '/juris',
+    ),
+    NavItemConfig(
+      label: 'Profile',
+      icon: Icons.person_outline_rounded,
+      route: '/profile',
+    ),
   ];
 
-  static const List<_NavItemConfig> caseTabs = [
-    _NavItemConfig(label: 'Search', icon: Icons.search_rounded, route: '/search_cases'),
-    _NavItemConfig(label: 'Cases', icon: Icons.business_center_rounded, route: '/cases'),
-    _NavItemConfig(label: 'Case Management', icon: Icons.assignment_outlined, route: '/case_management'),
-    _NavItemConfig(label: 'Home', icon: Icons.home_rounded, route: '/home'),
+  // ---------------------------------------------------------------------------
+  // Case Section Mode
+  // ---------------------------------------------------------------------------
+
+  static const List<NavItemConfig> caseTabs = [
+    NavItemConfig(
+      label: 'Search',
+      icon: Icons.search_rounded,
+      route: '/search_cases',
+    ),
+    NavItemConfig(
+      label: 'Cases',
+      icon: Icons.business_center_rounded,
+      route: '/cases',
+    ),
+    NavItemConfig(
+      label: 'Case Management',
+      icon: Icons.assignment_outlined,
+      route: '/case_management',
+    ),
+    NavItemConfig(
+      label: 'Home',
+      icon: Icons.home_rounded,
+      route: '/home',
+    ),
   ];
 
-  void _handleTap(BuildContext context, int index, _NavItemConfig item) {
-    if (mode == NavMode.home) {
-      if (item.route == '/cases') {
-        AppNavController.instance.switchToCaseSection(context, index: 1, route: '/cases');
-        return;
-      }
-      if (index == currentIndex) return;
-      if (onNavigate != null) {
-        onNavigate!(item.route);
-      } else {
-        Navigator.of(context).pushNamed(item.route);
-      }
-    } else {
-      // Case Section Mode
-      if (item.route == '/home') {
-        AppNavController.instance.switchToHome(context, index: 0, route: '/home');
-        return;
-      }
-      if (index == currentIndex) return;
-      AppNavController.instance.updateState(
-        mode: NavMode.caseSection,
-        index: index,
-        route: item.route,
-      );
-      if (onNavigate != null) {
-        onNavigate!(item.route);
-      } else {
-        Navigator.of(context).pushNamed(item.route);
-      }
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
+
+  void _handleTap(
+    BuildContext context,
+    int index,
+    NavItemConfig item,
+  ) {
+    // Preserve parent-controlled navigation behavior.
+    if (onNavigate != null) {
+      onNavigate!(item.route);
+      return;
     }
+
+    if (mode == NavMode.home) {
+      // Cases is the entry point into Case Section Mode.
+      if (item.route == '/cases') {
+        AppNavController.instance.switchToCaseSection(
+          context,
+          index: 1,
+          route: '/cases',
+        );
+        return;
+      }
+
+      // Do nothing when the currently selected tab is tapped.
+      if (index == currentIndex) return;
+
+      Navigator.of(context).pushNamed(item.route);
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // Case Section Mode
+    // -------------------------------------------------------------------------
+
+    // Home exits Case Section Mode and restores Home Mode.
+    if (item.route == '/home') {
+      AppNavController.instance.switchToHome(
+        context,
+        index: 0,
+        route: '/home',
+      );
+      return;
+    }
+
+    // Do nothing when the currently selected tab is tapped.
+    if (index == currentIndex) return;
+
+    AppNavController.instance.updateState(
+      mode: NavMode.caseSection,
+      index: index,
+      route: item.route,
+    );
+
+    Navigator.of(context).pushNamed(item.route);
   }
+
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    final tabs = mode == NavMode.home ? homeTabs : caseTabs;
-    final clampedIndex = currentIndex.clamp(0, tabs.length - 1);
+    final List<NavItemConfig> tabs =
+        mode == NavMode.home ? homeTabs : caseTabs;
+
+    final int clampedIndex =
+        currentIndex.clamp(0, tabs.length - 1);
 
     return SafeArea(
       top: false,
       child: Container(
-        height: 72,
+        height: 76,
         decoration: const BoxDecoration(
           color: navBackground,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+          border: Border(
+            top: BorderSide(
+              color: Color(0x261F2B26),
+              width: 1,
+            ),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Color(0x2A111716),
-              blurRadius: 18,
-              offset: Offset(0, -4),
+              color: Color(0x40101815),
+              blurRadius: 22,
+              offset: Offset(0, -6),
             ),
           ],
         ),
@@ -107,62 +204,37 @@ class AppBottomNavigation extends StatelessWidget {
           child: KeyedSubtree(
             key: ValueKey<NavMode>(mode),
             child: Row(
-              children: List.generate(tabs.length, (index) {
-                final item = tabs[index];
-                final isSelected = index == clampedIndex;
+              children: List.generate(
+                tabs.length,
+                (index) {
+                  final NavItemConfig item = tabs[index];
+                  final bool isSelected =
+                      index == clampedIndex;
 
-                return Expanded(
-                  child: Semantics(
-                    button: true,
-                    selected: isSelected,
-                    label: item.label,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => _handleTap(context, index, item),
-                        borderRadius: BorderRadius.circular(18),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutCubic,
-                              width: isSelected ? 42 : 36,
-                              height: isSelected ? 42 : 36,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? gold.withValues(alpha: 0.16)
-                                    : Colors.transparent,
-                                shape: BoxShape.circle,
-                                border: isSelected
-                                    ? Border.all(color: gold.withValues(alpha: 0.4), width: 1.2)
-                                    : null,
-                              ),
-                              child: Icon(
-                                item.icon,
-                                color: isSelected ? gold : inactiveIcon,
-                                size: isSelected ? 23 : 21,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              item.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: isSelected ? gold : inactiveIcon,
-                                fontSize: 9.5,
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                letterSpacing: -0.1,
-                              ),
-                            ),
-                          ],
+                  return Expanded(
+                    child: Semantics(
+                      button: true,
+                      selected: isSelected,
+                      label: item.label,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () =>
+                              _handleTap(context, index, item),
+                          splashColor:
+                              gold.withValues(alpha: 0.06),
+                          highlightColor:
+                              gold.withValues(alpha: 0.03),
+                          child: _NavigationItem(
+                            item: item,
+                            isSelected: isSelected,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -170,3 +242,130 @@ class AppBottomNavigation extends StatelessWidget {
     );
   }
 }
+
+// =============================================================================
+// Navigation Item
+// =============================================================================
+
+class _NavigationItem extends StatelessWidget {
+  const _NavigationItem({
+    required this.item,
+    required this.isSelected,
+  });
+
+  final NavItemConfig item;
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 76,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // -------------------------------------------------------------------
+          // Active vertical indicator
+          // -------------------------------------------------------------------
+          Positioned(
+            top: 0,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              width: isSelected ? 28 : 0,
+              height: 2,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppBottomNavigation.gold
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: AppBottomNavigation.gold
+                              .withValues(alpha: 0.20),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+
+          // -------------------------------------------------------------------
+          // Icon + label
+          // -------------------------------------------------------------------
+          Padding(
+            padding: const EdgeInsets.only(
+              top: 4,
+              bottom: 5,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppBottomNavigation.navSurface
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: isSelected
+                        ? Border.all(
+                            color: AppBottomNavigation.goldSoft,
+                            width: 1,
+                          )
+                        : null,
+                  ),
+                  child: Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 160),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: Icon(
+                        item.icon,
+                        key: ValueKey<bool>(isSelected),
+                        size: isSelected ? 22 : 21,
+                        color: isSelected
+                            ? AppBottomNavigation.gold
+                            : AppBottomNavigation.inactiveIcon,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  style: TextStyle(
+                    color: isSelected
+                        ? AppBottomNavigation.activeText
+                        : AppBottomNavigation.inactiveText,
+                    fontSize: 10,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                    letterSpacing: 0,
+                    height: 1,
+                  ),
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/app_bottom_navigation.dart';
+import '../widgets/app_nav_controller.dart';
 import '../widgets/calendar_components.dart';
-import '../widgets/home_bottom_navigation.dart';
+import '../widgets/team_switcher_sheet.dart';
 
 /// Cause List Screen (Screen 2 in the PNG design).
 /// Displays daily scheduled cases with actions, filter selectors, and print utilities.
@@ -23,6 +25,7 @@ class _CauseListScreenState extends State<CauseListScreen> {
   late DateTime _selectedDate;
   final Set<String> _bookmarkedCaseIds = <String>{};
   String _lawyerFilter = 'Advocate (You)';
+  String _selectedMemberId = 'all';
 
   @override
   void initState() {
@@ -61,49 +64,20 @@ class _CauseListScreenState extends State<CauseListScreen> {
     }
   }
 
-  void _chooseLawyerFilter() {
-    showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: CalendarColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Select Advocate Filter',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: CalendarColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  title: Text(_lawyerFilter),
-                  leading: const Icon(Icons.person_rounded,
-                      color: CalendarColors.primaryGreen),
-                  onTap: () => Navigator.pop(context),
-                ),
-                ListTile(
-                  title: const Text('All Firm Associates'),
-                  leading: const Icon(Icons.group_rounded,
-                      color: CalendarColors.textMuted),
-                  onTap: () {
-                    setState(() => _lawyerFilter = 'All Firm Associates');
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
+  void _openTeamSwitcher() {
+    TeamSwitcherSheet.show(
+      context,
+      selectedMemberId: _selectedMemberId,
+      onSelected: (member) {
+        setState(() {
+          if (member == null) {
+            _selectedMemberId = 'all';
+            _lawyerFilter = 'All Firm Associates';
+          } else {
+            _selectedMemberId = member.id;
+            _lawyerFilter = member.name;
+          }
+        });
       },
     );
   }
@@ -178,28 +152,17 @@ class _CauseListScreenState extends State<CauseListScreen> {
             constraints: const BoxConstraints(maxWidth: 420),
             child: Column(
               children: [
-                // Top Header: Back arrow (ONLY screen with back button), Title, Filter & Search
+                // Top Header: Title, Team Switcher (Briefcase), Filter & Search (NO back button per rules)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 14, 6),
+                  padding: const EdgeInsets.fromLTRB(18, 12, 14, 8),
                   child: Row(
                     children: [
-                      IconButton(
-                        tooltip: 'Back',
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          size: 23,
-                          color: CalendarColors.textDark,
-                        ),
-                        splashRadius: 20,
-                      ),
                       const Expanded(
                         child: Text(
                           'Cause List',
-                          textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'serif',
-                            fontSize: 21,
+                            fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: CalendarColors.textDark,
                             letterSpacing: -0.2,
@@ -207,10 +170,10 @@ class _CauseListScreenState extends State<CauseListScreen> {
                         ),
                       ),
                       IconButton(
-                        tooltip: 'Filter',
-                        onPressed: _chooseLawyerFilter,
+                        tooltip: 'Switch Counsel',
+                        onPressed: _openTeamSwitcher,
                         icon: const Icon(
-                          Icons.filter_list_rounded,
+                          Icons.business_center_outlined,
                           size: 21,
                           color: CalendarColors.textDark,
                         ),
@@ -218,11 +181,24 @@ class _CauseListScreenState extends State<CauseListScreen> {
                         padding: const EdgeInsets.all(6),
                         constraints: const BoxConstraints(),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Filter',
+                        onPressed: _openTeamSwitcher,
+                        icon: const Icon(
+                          Icons.tune_rounded,
+                          size: 21,
+                          color: CalendarColors.textDark,
+                        ),
+                        splashRadius: 18,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 8),
                       IconButton(
                         tooltip: 'Search',
                         onPressed: () =>
-                            _showFeedback('Search cause list cases'),
+                            Navigator.of(context).pushNamed('/search_cases'),
                         icon: const Icon(
                           Icons.search_rounded,
                           size: 21,
@@ -245,7 +221,7 @@ class _CauseListScreenState extends State<CauseListScreen> {
                       // Lawyer / User pill
                       Expanded(
                         child: InkWell(
-                          onTap: _chooseLawyerFilter,
+                          onTap: _openTeamSwitcher,
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
                             height: 38,
@@ -354,7 +330,11 @@ class _CauseListScreenState extends State<CauseListScreen> {
                                   date, _selectedDate)) {
                             final item = Map<String, dynamic>.from(data);
                             item['id'] = doc.id;
-                            casesForDay.add(item);
+                            final handled = (item['handledBy'] as String? ?? '').toLowerCase();
+                            final filter = _lawyerFilter.toLowerCase().replaceAll(' (you)', '').trim();
+                            if (_selectedMemberId == 'all' || _lawyerFilter == 'All Firm Associates' || handled.contains(filter)) {
+                              casesForDay.add(item);
+                            }
                           }
                         }
                       }
@@ -426,7 +406,8 @@ class _CauseListScreenState extends State<CauseListScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: HomeBottomNavigation(
+      bottomNavigationBar: AppBottomNavigation(
+        mode: NavMode.home,
         currentIndex: 1,
         onNavigate: _handleNavigate,
       ),

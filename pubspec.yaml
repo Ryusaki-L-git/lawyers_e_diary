@@ -21,6 +21,8 @@ dependencies:
   url_launcher: ^6.3.2
   printing: ^5.15.0
   pdf: ^3.13.0
+  path_provider_foundation: 2.4.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

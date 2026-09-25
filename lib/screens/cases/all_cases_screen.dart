@@ -232,24 +232,42 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                         _latestCases = cases;
 
                         if (cases.isEmpty) {
+                          final hasActiveFilter =
+                              _searchController.text.isNotEmpty ||
+                              _activeChip != 'All' ||
+                              _filterCriteria.caseType != 'All' ||
+                              _filterCriteria.assignedTo != 'All' ||
+                              _filterCriteria.customDateRange != null;
+
                           return Padding(
                             padding: const EdgeInsets.all(18),
                             child: CaseEmptyState(
-                              title: 'No cases found',
-                              subtitle: _searchController.text.isNotEmpty
-                                  ? 'No results found'
-                                  : 'No cases available',
-                              icon: _searchController.text.isNotEmpty
-                                  ? Icons.search_off_rounded
+                              title: hasActiveFilter
+                                  ? 'No cases found'
+                                  : 'No cases yet',
+                              subtitle: hasActiveFilter
+                                  ? (_searchController.text.isNotEmpty
+                                      ? 'No results found'
+                                      : 'No cases match your filters')
+                                  : 'Get started by creating your first case docket',
+                              icon: hasActiveFilter
+                                  ? (_searchController.text.isNotEmpty
+                                      ? Icons.search_off_rounded
+                                      : Icons.folder_open_rounded)
                                   : Icons.folder_open_rounded,
-                              actionLabel: 'Reset',
+                              actionLabel:
+                                  hasActiveFilter ? 'Reset' : 'Add Case',
                               onAction: () {
-                                setState(() {
-                                  _searchController.clear();
-                                  _activeChip = 'All';
-                                  _filterCriteria =
-                                      const CaseFilterCriteria();
-                                });
+                                if (hasActiveFilter) {
+                                  setState(() {
+                                    _searchController.clear();
+                                    _activeChip = 'All';
+                                    _filterCriteria =
+                                        const CaseFilterCriteria();
+                                  });
+                                } else {
+                                  Navigator.pushNamed(context, '/add_case');
+                                }
                               },
                             ),
                           );
@@ -279,6 +297,8 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                               },
                               onOpenCase: () => _openCaseDetail(c),
                               onDiscussJuris: _openJuris,
+                              onToggleStar: () => _firestoreService
+                                  .toggleCaseStarred(c.id, !c.isStarred),
                             );
                           },
                         );
@@ -290,6 +310,25 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
             ),
           ),
         ),
+        floatingActionButton: _isSelectionMode
+            ? null
+            : FloatingActionButton.extended(
+                heroTag: 'allCasesAddCaseFab',
+                onPressed: () {
+                  Navigator.of(context).pushNamed('/add_case');
+                },
+                backgroundColor: primaryGreen,
+                foregroundColor: Colors.white,
+                elevation: 3,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text(
+                  'Add Case',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
 
         // PRINT SELECTED
         bottomSheet: _isSelectionMode

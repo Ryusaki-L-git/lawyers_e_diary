@@ -100,6 +100,16 @@ class CaseManagementScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
+                  // Action Tile: Add New Case
+                  _actionTile(
+                    icon: Icons.add_circle_outline_rounded,
+                    title: 'Add New Case',
+                    subtitle: 'Register a new case docket',
+                    onTap: () {
+                      Navigator.of(context).pushNamed('/add_case');
+                    },
+                  ),
+
                   // Action Tile 1: View All Cases
                   _actionTile(
                     icon: Icons.folder_open_rounded,

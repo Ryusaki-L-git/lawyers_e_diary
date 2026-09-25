@@ -3,11 +3,28 @@ import 'package:flutter/material.dart';
 
 import 'login_screen.dart';
 import 'screens/calendar_list_screen.dart';
+import 'screens/cases/add_case_screen.dart';
+import 'screens/cases/all_cases_screen.dart';
+import 'screens/cases/case_management_screen.dart';
+import 'screens/cases/completed_cases_screen.dart';
+import 'screens/cases/deleted_cases_screen.dart';
+import 'screens/cases/search_cases_screen.dart';
+import 'screens/cases/transfer_case_screen.dart';
 import 'screens/cause_list_screen.dart';
 import 'screens/full_calendar_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/module_landing_screen.dart';
 import 'screens/notification_screen.dart';
+import 'screens/profile/profile_screen.dart';
+import 'screens/fees/fee_list_screen.dart';
+import 'screens/cases/starred_cases_screen.dart';
+import 'screens/reminders/reminders_list_screen.dart';
+import 'screens/settings/app_settings_screen.dart';
+import 'screens/settings/cloud_storage_screen.dart';
+import 'screens/settings/upgrade_prompt_screen.dart';
+import 'screens/clients/client_list_screen.dart';
+import 'screens/support/help_support_screen.dart';
+import 'screens/team/team_entry_screen.dart';
 import 'signup_screen.dart';
 import 'splash_screen.dart';
 import 'welcome_screen.dart';
@@ -35,14 +52,16 @@ class MyApp extends StatelessWidget {
         '/signup': (context) => const SignupScreen(),
         '/welcome': (context) => const WelcomeScreen(),
         '/home': (context) => const HomeScreen(),
-        '/cases': (context) => const ModuleLandingScreen(
-              title: 'Cases',
-              icon: Icons.gavel_rounded,
-            ),
-        '/clients': (context) => const ModuleLandingScreen(
-              title: 'Clients',
-              icon: Icons.groups_rounded,
-            ),
+        '/cases': (context) => const AllCasesScreen(),
+        '/add_case': (context) => const AddCaseScreen(),
+        '/search_cases': (context) => const SearchCasesScreen(),
+        '/case_management': (context) => const CaseManagementScreen(),
+        '/completed_cases': (context) => const CompletedCasesScreen(),
+        '/deleted_cases': (context) => const DeletedCasesScreen(),
+        '/transfer_case': (context) => const TransferCaseScreen(),
+        '/clients': (context) => const ClientListScreen(),
+        '/support': (context) => const HelpSupportScreen(),
+        '/team': (context) => const TeamEntryScreen(),
         '/calendar': (context) => const CalendarListScreen(),
         '/calendar_list': (context) => const CalendarListScreen(),
         '/cause_list': (context) => const CauseListScreen(),
@@ -51,26 +70,17 @@ class MyApp extends StatelessWidget {
               title: 'Drafting Studio',
               icon: Icons.auto_awesome_rounded,
             ),
-        '/profile': (context) => const ModuleLandingScreen(
-              title: 'Settings',
-              icon: Icons.settings_outlined,
-            ),
-        '/fee': (context) => const ModuleLandingScreen(
-              title: 'Fee Calculator',
-              icon: Icons.calculate_rounded,
-            ),
+        '/profile': (context) => const ProfileScreen(),
+        '/fee': (context) => const FeeListScreen(),
         '/todo': (context) => const ModuleLandingScreen(
               title: 'To-Do List',
               icon: Icons.checklist_rounded,
             ),
-        '/reminders': (context) => const ModuleLandingScreen(
-              title: 'Reminders',
-              icon: Icons.notifications_active_outlined,
-            ),
-        '/starred': (context) => const ModuleLandingScreen(
-              title: 'Starred Cases',
-              icon: Icons.star_rounded,
-            ),
+        '/reminders': (context) => const RemindersListScreen(),
+        '/starred': (context) => const StarredCasesScreen(),
+        '/settings': (context) => const AppSettingsScreen(),
+        '/cloud_storage': (context) => const CloudStorageScreen(),
+        '/upgrade': (context) => const UpgradePromptScreen(),
         '/notifications': (context) => const NotificationScreen(),
       },
     );

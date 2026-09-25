@@ -48,6 +48,7 @@ class CaseModel {
     this.handledBy = 'Advocate',
     this.userId = '',
     this.clientPhone,
+    this.isStarred = false,
     this.documents = const [],
     this.notes = const [],
     this.createdAt,
@@ -67,6 +68,7 @@ class CaseModel {
   final String handledBy;
   final String userId;
   final String? clientPhone;
+  final bool isStarred;
   final List<CaseDocumentModel> documents;
   final List<String> notes;
   final DateTime? createdAt;
@@ -78,6 +80,7 @@ class CaseModel {
   bool get isActive => status.toLowerCase() == 'active';
   bool get isUpcoming => status.toLowerCase() == 'upcoming';
   bool get isUrgent => status.toLowerCase() == 'urgent';
+  String get title => caseTitle;
 
   factory CaseModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
@@ -133,6 +136,7 @@ class CaseModel {
       clientPhone: data['clientPhone'] as String? ??
           data['phone'] as String? ??
           data['whatsappNumber'] as String?,
+      isStarred: data['isStarred'] as bool? ?? false,
       documents: docList,
       notes: noteList,
       createdAt: parseDate(data['createdAt']),
@@ -155,6 +159,7 @@ class CaseModel {
       'handledBy': handledBy,
       'userId': userId,
       if (clientPhone != null) 'clientPhone': clientPhone,
+      'isStarred': isStarred,
       'documents': documents.map((d) => d.toMap()).toList(),
       'notes': notes,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
@@ -175,6 +180,7 @@ class CaseModel {
     String? handledBy,
     String? userId,
     String? clientPhone,
+    bool? isStarred,
     List<CaseDocumentModel>? documents,
     List<String>? notes,
     DateTime? deletedAt,
@@ -192,6 +198,7 @@ class CaseModel {
       handledBy: handledBy ?? this.handledBy,
       userId: userId ?? this.userId,
       clientPhone: clientPhone ?? this.clientPhone,
+      isStarred: isStarred ?? this.isStarred,
       documents: documents ?? this.documents,
       notes: notes ?? this.notes,
       createdAt: createdAt,

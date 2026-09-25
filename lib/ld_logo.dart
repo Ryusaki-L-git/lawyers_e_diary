@@ -2,11 +2,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 /// ================= GOOGLE LOGO =================
+///
+/// KEEP THIS LOGO FOR GOOGLE SIGN-IN.
+/// This implementation is intentionally preserved.
 
 class GoogleLogo extends StatelessWidget {
   final double size;
 
-  const GoogleLogo({super.key, this.size = 24});
+  const GoogleLogo({
+    super.key,
+    this.size = 24,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +37,10 @@ class _GoogleLogoPainter extends CustomPainter {
     final radius = size.shortestSide * 0.40;
     final strokeWidth = size.shortestSide * 0.14;
 
-    final rect = Rect.fromCircle(center: center, radius: radius);
+    final rect = Rect.fromCircle(
+      center: center,
+      radius: radius,
+    );
 
     Paint arcPaint(Color color) => Paint()
       ..color = color
@@ -40,17 +49,47 @@ class _GoogleLogoPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
 
-    canvas.drawArc(rect, -math.pi * 0.9, math.pi * 0.6, false, arcPaint(_red));
-    canvas.drawArc(rect, -math.pi * 0.3, math.pi * 0.3, false, arcPaint(_blue));
-    canvas.drawArc(rect, math.pi * 0.0, math.pi * 0.5, false, arcPaint(_green));
-    canvas.drawArc(rect, math.pi * 0.5, math.pi * 0.5, false, arcPaint(_yellow));
+    canvas.drawArc(
+      rect,
+      -math.pi * 0.9,
+      math.pi * 0.6,
+      false,
+      arcPaint(_red),
+    );
+
+    canvas.drawArc(
+      rect,
+      -math.pi * 0.3,
+      math.pi * 0.3,
+      false,
+      arcPaint(_blue),
+    );
+
+    canvas.drawArc(
+      rect,
+      math.pi * 0.0,
+      math.pi * 0.5,
+      false,
+      arcPaint(_green),
+    );
+
+    canvas.drawArc(
+      rect,
+      math.pi * 0.5,
+      math.pi * 0.5,
+      false,
+      arcPaint(_yellow),
+    );
 
     final barHeight = strokeWidth;
     final barWidth = size.width * 0.35;
 
     canvas.drawRect(
       Rect.fromCenter(
-        center: Offset(center.dx + barWidth * 0.2, center.dy),
+        center: Offset(
+          center.dx + barWidth * 0.2,
+          center.dy,
+        ),
         width: barWidth,
         height: barHeight,
       ),
@@ -61,24 +100,38 @@ class _GoogleLogoPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(
+    covariant _GoogleLogoPainter oldDelegate,
+  ) {
+    return false;
+  }
 }
 
-/// ================= LAW FIRM LOGO =================
-
-/// A transparent, scalable LD legal mark.
+/// ================= LAWYER'S E-DIARY MARK =================
 ///
-/// The painter never draws a canvas background, so it can sit over any color,
-/// image, or gradient supplied by the app that uses it.
+/// Modern Legal Editorial mark.
+///
+/// Concept:
+/// - Classical legal architecture
+/// - Fountain pen / legal drafting
+/// - Partial circular arch
+/// - Forest green authority
+/// - Restrained antique gold prestige
+///
+/// Transparent background.
+/// No background plate.
+/// No glow.
+/// No gradients.
+/// Suitable for splash, app icon, headers and branding.
+
 class LawFirmMark extends StatelessWidget {
   const LawFirmMark({
     super.key,
     this.width,
-    this.gold = const Color(0xFFC79435),
-    this.ink = const Color(0xFF39241B),
+    this.gold = const Color(0xFFCCA046),
+    this.ink = const Color(0xFF1F3D2B),
   });
 
-  /// Leave null to let the parent constrain the mark. Its native ratio is 5:4.
   final double? width;
   final Color gold;
   final Color ink;
@@ -88,11 +141,14 @@ class LawFirmMark extends StatelessWidget {
     return SizedBox(
       width: width,
       child: AspectRatio(
-        aspectRatio: 5 / 4,
+        aspectRatio: 1,
         child: CustomPaint(
-          painter: _LawFirmMarkPainter(gold: gold, ink: ink),
+          painter: _LawFirmMarkPainter(
+            gold: gold,
+            ink: ink,
+          ),
           child:  Semantics(
-            label: 'LD legal services logo',
+            label: "Lawyer's E-Diary legal mark",
             image: true,
           ),
         ),
@@ -102,172 +158,279 @@ class LawFirmMark extends StatelessWidget {
 }
 
 class _LawFirmMarkPainter extends CustomPainter {
-  const _LawFirmMarkPainter({required this.gold, required this.ink});
+  const _LawFirmMarkPainter({
+    required this.gold,
+    required this.ink,
+  });
 
   final Color gold;
   final Color ink;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final scale = size.width / 700;
-    canvas.save();
-    canvas.scale(scale, scale);
+  void paint(
+    Canvas canvas,
+    Size size,
+  ) {
+    final double scale = size.shortestSide / 400;
 
-    _paintD(canvas);
-    _paintL(canvas);
-    _paintScales(canvas);
-    _paintBook(canvas);
+    canvas.save();
+
+    canvas.translate(
+      (size.width - 400 * scale) / 2,
+      (size.height - 400 * scale) / 2,
+    );
+
+    canvas.scale(scale);
+
+    _paintArch(canvas);
+    _paintCapital(canvas);
+    _paintColumns(canvas);
+    _paintPenNib(canvas);
 
     canvas.restore();
   }
 
-  Paint _paintFor(Color color) => Paint()
-    ..style = PaintingStyle.fill
-    ..isAntiAlias = true
-    ..shader = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: <Color>[
-        Color.lerp(color, Colors.white, .16)!,
-        color,
-        Color.lerp(color, Colors.black, .14)!,
-      ],
-      stops: const <double>[0, .52, 1],
-    ).createShader(const Rect.fromLTWH(0, 0, 700, 560));
+  // ============================================================
+  // PARTIAL CIRCULAR LEGAL ARCH
+  // ============================================================
 
-  void _paintD(Canvas canvas) {
-    final d = Path()
-      ..fillType = PathFillType.evenOdd
-      ..moveTo(245, 80)
-      ..lineTo(385, 80)
-      ..cubicTo(552, 80, 650, 169, 650, 300)
-      ..cubicTo(650, 431, 552, 520, 385, 520)
-      ..lineTo(245, 520)
-      ..close()
-      ..moveTo(331, 110)
-      ..lineTo(383, 110)
-      ..cubicTo(502, 110, 575, 181, 575, 300)
-      ..cubicTo(575, 419, 502, 490, 383, 490)
-      ..lineTo(331, 490)
-      ..close();
-    canvas.drawPath(d, _paintFor(gold));
-  }
-
-  void _paintL(Canvas canvas) {
-    final l = Path()
-      ..moveTo(47, 80)
-      ..lineTo(189, 80)
-      ..quadraticBezierTo(194, 82, 189, 86)
-      ..cubicTo(163, 89, 151, 103, 151, 142)
-      ..lineTo(151, 451)
-      ..cubicTo(151, 474, 162, 486, 188, 486)
-      ..lineTo(248, 486)
-      ..cubicTo(305, 486, 328, 466, 346, 427)
-      ..quadraticBezierTo(352, 411, 369, 403)
-      ..lineTo(412, 403)
-      ..cubicTo(400, 474, 354, 521, 273, 523)
-      ..lineTo(47, 523)
-      ..quadraticBezierTo(42, 519, 48, 515)
-      ..cubicTo(72, 510, 86, 492, 86, 455)
-      ..lineTo(86, 143)
-      ..cubicTo(86, 103, 73, 89, 48, 86)
-      ..quadraticBezierTo(42, 82, 47, 80)
-      ..close();
-    canvas.drawPath(l, _paintFor(ink));
-  }
-
-  void _paintScales(Canvas canvas) {
-    final fill = _paintFor(gold);
-    final stroke = Paint()
+  void _paintArch(Canvas canvas) {
+    final Paint paint = Paint()
       ..color = gold
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
 
-    canvas.drawCircle(const Offset(442, 231), 6, fill);
+    const Rect rect = Rect.fromLTWH(
+      55,
+      45,
+      290,
+      290,
+    );
+
+    // Open at the bottom.
+    canvas.drawArc(
+      rect,
+      math.pi * 0.18,
+      math.pi * 0.64,
+      false,
+      paint,
+    );
+  }
+
+  // ============================================================
+  // CLASSICAL CAPITAL
+  // ============================================================
+
+  void _paintCapital(Canvas canvas) {
+    final Paint goldPaint = Paint()
+      ..color = gold
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    // Upper thin line.
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(437, 242, 10, 113),
-        const Radius.circular(5),
+        const Rect.fromLTWH(
+          105,
+          82,
+          190,
+          10,
+        ),
+        const Radius.circular(3),
       ),
-      fill,
+      goldPaint,
     );
-    canvas.drawCircle(const Offset(442, 251), 9, fill);
-    canvas.drawLine(const Offset(380, 253), const Offset(504, 253), stroke);
-    canvas.drawCircle(const Offset(380, 253), 6, fill);
-    canvas.drawCircle(const Offset(504, 253), 6, fill);
 
-    _paintPan(canvas, const Offset(380, 253), fill, stroke);
-    _paintPan(canvas, const Offset(504, 253), fill, stroke);
-
-    final base = Path()
-      ..moveTo(434, 354)
-      ..quadraticBezierTo(442, 344, 450, 354)
-      ..lineTo(458, 360)
-      ..quadraticBezierTo(461, 365, 455, 365)
-      ..lineTo(429, 365)
-      ..quadraticBezierTo(423, 365, 426, 360)
+    // Main capital.
+    final Path capital = Path()
+      ..moveTo(92, 96)
+      ..lineTo(308, 96)
+      ..lineTo(296, 108)
+      ..lineTo(104, 108)
       ..close();
-    canvas.drawPath(base, fill);
+
+    canvas.drawPath(
+      capital,
+      goldPaint,
+    );
   }
 
-  void _paintPan(Canvas canvas, Offset pivot, Paint fill, Paint stroke) {
-    final left = Offset(pivot.dx - 26, 326);
-    final right = Offset(pivot.dx + 26, 326);
-    canvas.drawLine(pivot, left, stroke);
-    canvas.drawLine(pivot, right, stroke);
+  // ============================================================
+  // LEGAL COLUMNS
+  // ============================================================
 
-    final pan = Path()
-      ..moveTo(pivot.dx - 30, 326)
-      ..quadraticBezierTo(pivot.dx, 354, pivot.dx + 30, 326)
-      ..lineTo(pivot.dx + 26, 326)
-      ..quadraticBezierTo(pivot.dx, 340, pivot.dx - 26, 326)
+  void _paintColumns(Canvas canvas) {
+    final Paint paint = Paint()
+      ..color = ink
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    // Left column.
+    _drawColumn(
+      canvas,
+      paint,
+      122,
+    );
+
+    // Center column.
+    _drawColumn(
+      canvas,
+      paint,
+      174,
+    );
+
+    // Right column.
+    _drawColumn(
+      canvas,
+      paint,
+      226,
+    );
+
+    // Lower architectural base.
+    final Path base = Path()
+      ..moveTo(106, 247)
+      ..lineTo(294, 247)
+      ..lineTo(283, 260)
+      ..lineTo(117, 260)
       ..close();
-    canvas.drawPath(pan, fill);
+
+    canvas.drawPath(
+      base,
+      Paint()
+        ..color = gold
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true,
+    );
   }
 
-  void _paintBook(Canvas canvas) {
-    final dark = _paintFor(ink);
-    final bright = _paintFor(gold);
+  void _drawColumn(
+    Canvas canvas,
+    Paint paint,
+    double x,
+  ) {
+    // Column shaft.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          x,
+          113,
+          18,
+          112,
+        ),
+        const Radius.circular(2),
+      ),
+      paint,
+    );
 
-    final pages = Path()
-      ..moveTo(354, 374)
-      ..quadraticBezierTo(400, 369, 442, 397)
-      ..quadraticBezierTo(484, 369, 530, 374)
-      ..lineTo(535, 381)
-      ..quadraticBezierTo(487, 376, 442, 405)
-      ..quadraticBezierTo(397, 376, 349, 381)
-      ..close();
-    canvas.drawPath(pages, bright);
+    // Small capital detail.
+    final Paint goldPaint = Paint()
+      ..color = gold
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
 
-    final book = Path()
-      ..moveTo(356, 383)
-      ..quadraticBezierTo(400, 378, 441, 403)
-      ..quadraticBezierTo(482, 378, 528, 383)
-      ..lineTo(533, 395)
-      ..quadraticBezierTo(483, 389, 442, 414)
-      ..quadraticBezierTo(401, 389, 351, 395)
-      ..close();
-    canvas.drawPath(book, dark);
+    canvas.drawRect(
+      Rect.fromLTWH(
+        x - 5,
+        109,
+        28,
+        6,
+      ),
+      goldPaint,
+    );
 
-    final pageHighlight = Path()
-      ..moveTo(362, 388)
-      ..quadraticBezierTo(401, 384, 440, 407)
-      ..quadraticBezierTo(479, 384, 522, 388)
-      ..lineTo(518, 391)
-      ..quadraticBezierTo(480, 387, 442, 409)
-      ..quadraticBezierTo(404, 387, 366, 391)
+    // Small base.
+    canvas.drawRect(
+      Rect.fromLTWH(
+        x - 4,
+        222,
+        26,
+        6,
+      ),
+      goldPaint,
+    );
+  }
+
+  // ============================================================
+  // FOUNTAIN-PEN NIB
+  // ============================================================
+
+  void _paintPenNib(Canvas canvas) {
+    final Paint goldPaint = Paint()
+      ..color = gold
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    final Path nib = Path()
+      ..moveTo(173, 220)
+      ..lineTo(200, 220)
+      ..lineTo(200, 292)
+      ..lineTo(187, 330)
+      ..lineTo(173, 292)
       ..close();
-    canvas.drawPath(pageHighlight, _paintFor(const Color(0xFFF7E4AE)));
+
+    canvas.drawPath(
+      nib,
+      goldPaint,
+    );
+
+    // Nib interior.
+    final Path innerNib = Path()
+      ..moveTo(187, 245)
+      ..lineTo(194, 263)
+      ..lineTo(187, 305)
+      ..lineTo(180, 263)
+      ..close();
+
+    canvas.drawPath(
+      innerNib,
+      Paint()
+        ..color = ink
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true,
+    );
+
+    // Central slit.
+    final Paint slit = Paint()
+      ..color = const Color(0xFFF7F5F2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+
+    canvas.drawLine(
+      const Offset(187, 260),
+      const Offset(187, 312),
+      slit,
+    );
+
+    // Small gold diamond accent.
+    final Path diamond = Path()
+      ..moveTo(187, 275)
+      ..lineTo(195, 283)
+      ..lineTo(187, 291)
+      ..lineTo(179, 283)
+      ..close();
+
+    canvas.drawPath(
+      diamond,
+      goldPaint,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _LawFirmMarkPainter oldDelegate) =>
-      oldDelegate.gold != gold || oldDelegate.ink != ink;
+  bool shouldRepaint(
+    covariant _LawFirmMarkPainter oldDelegate,
+  ) {
+    return oldDelegate.gold != gold ||
+        oldDelegate.ink != ink;
+  }
 
   @override
-  bool shouldRebuildSemantics(covariant _LawFirmMarkPainter oldDelegate) =>
-      false;
+  bool shouldRebuildSemantics(
+    covariant _LawFirmMarkPainter oldDelegate,
+  ) {
+    return false;
+  }
 }
