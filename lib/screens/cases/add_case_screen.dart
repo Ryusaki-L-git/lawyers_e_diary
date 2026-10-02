@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../data/local/app_database.dart';
 import '../../models/client_model.dart';
+import '../../repositories/case_repository.dart';
 import '../../services/client_service.dart';
-import '../../services/firestore_service.dart';
 import '../../widgets/app_palette.dart';
 
 /// Screen to create and register a new case docket in Lawyer's E-Diary.
@@ -15,6 +16,9 @@ class AddCaseScreen extends StatefulWidget {
 
 class _AddCaseScreenState extends State<AddCaseScreen> {
   final _formKey = GlobalKey<FormState>();
+  final CaseRepository _caseRepository = CaseRepository(
+    database: AppDatabase.instance,
+  );
 
   final _titleController = TextEditingController();
   final _caseNumberController = TextEditingController();
@@ -35,11 +39,7 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
     'Appellate',
   ];
 
-  static const List<String> _statusOptions = [
-    'Active',
-    'Upcoming',
-    'Urgent',
-  ];
+  static const List<String> _statusOptions = ['Active', 'Upcoming', 'Urgent'];
 
   String _selectedCaseType = 'Civil Case';
   String _selectedStatus = 'Active';
@@ -174,8 +174,8 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
                             ),
                             leading: CircleAvatar(
                               radius: 18,
-                              backgroundColor:
-                                  AppPalette.primaryGreen.withValues(alpha: 0.1),
+                              backgroundColor: AppPalette.primaryGreen
+                                  .withValues(alpha: 0.1),
                               child: Text(
                                 c.name.isNotEmpty
                                     ? c.name[0].toUpperCase()
@@ -249,49 +249,36 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
       final opponent = _opponentNameController.text.trim();
       final note = _notesController.text.trim();
 
-      final caseId = await FirestoreService().addCase(
+      final caseId = await _caseRepository.createCase(
         caseTitle: title,
+        caseNumber: cnr,
         clientName: client,
+        opponentName: opponent,
         courtName: court,
-        cnrNumber: cnr,
-        status: _selectedStatus.toLowerCase(),
-        opponentName: opponent.isNotEmpty ? opponent : null,
         caseType: _selectedCaseType,
+        status: _selectedStatus.toLowerCase(),
         nextHearingDate: _selectedHearingDate,
+        handledBy: 'Advocate',
         clientPhone: phone.isNotEmpty ? phone : null,
-        initialNote: note.isNotEmpty ? note : null,
+        notes: note.isNotEmpty ? [note] : const [],
       );
 
       if (!mounted) return;
 
       setState(() => _isSaving = false);
 
-      if (caseId != null) {
-        Navigator.pop(context, caseId);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Case "$title" registered successfully.'),
-            backgroundColor: AppPalette.primaryGreen,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      Navigator.pop(context, caseId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Case "$title" saved on this device.'),
+          backgroundColor: AppPalette.primaryGreen,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to save case. Please try again.'),
-            backgroundColor: const Color(0xFFB3261E),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-          ),
-        );
-      }
+          margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
@@ -483,7 +470,10 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
                         onTap: _showClientPicker,
                         borderRadius: BorderRadius.circular(6),
                         child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
                           child: Row(
                             children: [
                               Icon(
@@ -610,7 +600,10 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
                     onTap: _pickHearingDate,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
                       decoration: BoxDecoration(
                         color: AppPalette.cardBackground,
                         borderRadius: BorderRadius.circular(12),
@@ -691,8 +684,8 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppPalette.primaryGreen,
                         foregroundColor: Colors.white,
-                        disabledBackgroundColor:
-                            AppPalette.primaryGreen.withValues(alpha: 0.6),
+                        disabledBackgroundColor: AppPalette.primaryGreen
+                            .withValues(alpha: 0.6),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -741,10 +734,7 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
         const SizedBox(height: 2),
         Text(
           subtitle,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppPalette.textMuted,
-          ),
+          style: const TextStyle(fontSize: 12, color: AppPalette.textMuted),
         ),
       ],
     );
@@ -790,9 +780,11 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppPalette.primaryGreen, width: 1.5),
+        borderSide: const BorderSide(
+          color: AppPalette.primaryGreen,
+          width: 1.5,
+        ),
       ),
     );
   }
 }
-

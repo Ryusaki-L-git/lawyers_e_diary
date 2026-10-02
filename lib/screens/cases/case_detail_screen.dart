@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../data/local/app_database.dart';
 import '../../models/case_model.dart';
-import '../../services/firestore_service.dart';
+import '../../repositories/case_repository.dart';
 import '../../utils/case_actions_helper.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/app_nav_controller.dart';
@@ -11,9 +12,14 @@ import 'transfer_case_screen.dart';
 /// Back button is allowed (deep screen rule).
 /// Accepts [caseItem] from parent screen.
 class CaseDetailScreen extends StatefulWidget {
-  const CaseDetailScreen({super.key, required this.caseItem});
+  const CaseDetailScreen({
+    super.key,
+    required this.caseItem,
+    this.localOnly = false,
+  });
 
   final CaseModel caseItem;
+  final bool localOnly;
 
   @override
   State<CaseDetailScreen> createState() => _CaseDetailScreenState();
@@ -21,6 +27,9 @@ class CaseDetailScreen extends StatefulWidget {
 
 class _CaseDetailScreenState extends State<CaseDetailScreen> {
   late bool _isStarred;
+  final CaseRepository _caseRepository = CaseRepository(
+    database: AppDatabase.instance,
+  );
 
   @override
   void initState() {
@@ -79,14 +88,23 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
         ),
         content: RichText(
           text: TextSpan(
-            style: const TextStyle(fontSize: 13.5, color: textMuted, height: 1.5),
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: textMuted,
+              height: 1.5,
+            ),
             children: [
               const TextSpan(text: 'Move '),
               TextSpan(
                 text: '"${caseItem.caseTitle}"',
-                style: const TextStyle(color: textDark, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  color: textDark,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              const TextSpan(text: ' to the deleted docket? You can restore it later.'),
+              const TextSpan(
+                text: ' from the active local docket? This archive stays on this device and is not available in Deleted Cases yet.',
+              ),
             ],
           ),
         ),
@@ -105,10 +123,15 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               backgroundColor: const Color(0xFFB3261E),
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
-            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -117,7 +140,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     if (confirmed != true || !context.mounted) return;
 
     try {
-      await FirestoreService().softDeleteCase(caseItem.id);
+      await _caseRepository.softDeleteCase(caseItem.id);
 
       if (!context.mounted) return;
 
@@ -127,7 +150,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           content: Text('"${caseItem.caseTitle}" moved to deleted.'),
           backgroundColor: primaryGreen,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
           duration: const Duration(seconds: 3),
         ),
@@ -139,7 +164,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           content: Text('Error: $e'),
           backgroundColor: const Color(0xFFB3261E),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
         ),
       );
@@ -150,10 +177,15 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     final newVal = !_isStarred;
     setState(() => _isStarred = newVal);
     try {
-      await FirestoreService().toggleCaseStarred(caseItem.id, newVal);
-    } catch (_) {
+      await _caseRepository.setCaseStarred(caseItem.id, newVal);
+    } catch (error) {
       // Revert on failure
       if (mounted) setState(() => _isStarred = !newVal);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to update local case: $error')),
+        );
+      }
     }
   }
 
@@ -206,7 +238,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         tooltip: _isStarred ? 'Unstar Case' : 'Star Case',
                         onPressed: _toggleStar,
                         icon: Icon(
-                          _isStarred ? Icons.star_rounded : Icons.star_outline_rounded,
+                          _isStarred
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
                           size: 24,
                           color: _isStarred ? gold : textMuted,
                         ),
@@ -255,12 +289,28 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                           }
                         },
                         itemBuilder: (ctx) => [
-                          _popupItem('share_full', Icons.share_outlined, 'Share Full Details'),
-                          _popupItem('share_summary', Icons.summarize_outlined, 'Share Summary'),
+                          _popupItem(
+                            'share_full',
+                            Icons.share_outlined,
+                            'Share Full Details',
+                          ),
+                          _popupItem(
+                            'share_summary',
+                            Icons.summarize_outlined,
+                            'Share Summary',
+                          ),
                           if (caseItem.clientPhone != null &&
                               caseItem.clientPhone!.trim().isNotEmpty)
-                            _popupItem('whatsapp', Icons.chat_outlined, 'WhatsApp Client'),
-                          _popupItem('print', Icons.print_outlined, 'Print Case'),
+                            _popupItem(
+                              'whatsapp',
+                              Icons.chat_outlined,
+                              'WhatsApp Client',
+                            ),
+                          _popupItem(
+                            'print',
+                            Icons.print_outlined,
+                            'Print Case',
+                          ),
                         ],
                       ),
                     ],
@@ -301,7 +351,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                               const SizedBox(height: 8),
                               _infoRow(Icons.tag_rounded, caseItem.caseNumber),
                               const SizedBox(height: 5),
-                              _infoRow(Icons.folder_open_rounded, caseItem.caseType),
+                              _infoRow(
+                                Icons.folder_open_rounded,
+                                caseItem.caseType,
+                              ),
                             ],
                           ),
                         ),
@@ -352,7 +405,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                                     (note) => Padding(
                                       padding: const EdgeInsets.only(bottom: 8),
                                       child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Padding(
                                             padding: EdgeInsets.only(top: 5),
@@ -405,26 +459,27 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                           icon: Icons.auto_awesome_rounded,
                           label: 'Discuss with Juris AI',
                           color: primaryGreen,
-                          onTap: () => Navigator.of(context).pushNamed('/juris'),
+                          onTap: () =>
+                              Navigator.of(context).pushNamed('/juris'),
                         ),
 
                         const SizedBox(height: 8),
 
-                        // Transfer Case
-                        _actionButton(
-                          context: context,
-                          icon: Icons.swap_horiz_rounded,
-                          label: 'Transfer Case',
-                          color: const Color(0xFF3D6B4F),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  TransferCaseScreen(caseItem: caseItem),
+                        if (!widget.localOnly) ...[
+                          _actionButton(
+                            context: context,
+                            icon: Icons.swap_horiz_rounded,
+                            label: 'Transfer Case',
+                            color: const Color(0xFF3D6B4F),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    TransferCaseScreen(caseItem: caseItem),
+                              ),
                             ),
                           ),
-                        ),
-
-                        const SizedBox(height: 8),
+                          const SizedBox(height: 8),
+                        ],
 
                         // Update Case
                         _actionButton(
@@ -460,7 +515,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
         currentIndex: 1,
         onNavigate: (route) {
           if (route == '/home') {
-            AppNavController.instance.switchToHome(context, index: 0, route: '/home');
+            AppNavController.instance.switchToHome(
+              context,
+              index: 0,
+              route: '/home',
+            );
           } else {
             Navigator.of(context).pushNamed(route);
           }
@@ -592,7 +651,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               color: const Color(0xFFF7F5F2),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.description_outlined, size: 19, color: primaryGreen),
+            child: const Icon(
+              Icons.description_outlined,
+              size: 19,
+              color: primaryGreen,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -663,7 +726,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
         style: OutlinedButton.styleFrom(
           foregroundColor: color,
           side: BorderSide(color: color.withValues(alpha: 0.35), width: 1),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           alignment: Alignment.centerLeft,
           padding: const EdgeInsets.symmetric(horizontal: 16),
         ),

@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../data/local/app_database.dart';
 import '../../models/case_model.dart';
-import '../../services/firestore_service.dart';
+import '../../repositories/case_repository.dart';
 import '../../utils/case_actions_helper.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/app_nav_controller.dart';
@@ -20,7 +22,9 @@ class AllCasesScreen extends StatefulWidget {
 }
 
 class _AllCasesScreenState extends State<AllCasesScreen> {
-  final FirestoreService _firestoreService = FirestoreService();
+  final CaseRepository _caseRepository = CaseRepository(
+    database: AppDatabase.instance,
+  );
   final TextEditingController _searchController = TextEditingController();
 
   Timer? _debounce;
@@ -82,13 +86,50 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
   void _openCaseDetail(CaseModel caseItem) {
     Navigator.of(context).push(
       CalendarPageRoute(
-        builder: (_) => CaseDetailScreen(caseItem: caseItem),
+        builder: (_) => CaseDetailScreen(caseItem: caseItem, localOnly: true),
       ),
     );
   }
 
   void _openJuris() {
     Navigator.of(context).pushNamed('/juris');
+  }
+
+  DateTimeRange? get _hearingDateRange {
+    if (_filterCriteria.customDateRange != null) {
+      return _filterCriteria.customDateRange;
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    switch (_filterCriteria.datePeriod) {
+      case 'Today':
+        return DateTimeRange(
+          start: today,
+          end: today
+              .add(const Duration(days: 1))
+              .subtract(const Duration(microseconds: 1)),
+        );
+      case 'Week':
+        final start = today.subtract(Duration(days: today.weekday - 1));
+        return DateTimeRange(
+          start: start,
+          end: start
+              .add(const Duration(days: 7))
+              .subtract(const Duration(microseconds: 1)),
+        );
+      case 'Month':
+        final start = DateTime(today.year, today.month);
+        return DateTimeRange(
+          start: start,
+          end: DateTime(
+            today.year,
+            today.month + 1,
+          ).subtract(const Duration(microseconds: 1)),
+        );
+      default:
+        return null;
+    }
   }
 
   @override
@@ -177,8 +218,9 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 18),
                     child: Row(
-                      children: ['All', 'Active', 'Upcoming', 'Urgent']
-                          .map((chip) {
+                      children: ['All', 'Active', 'Upcoming', 'Urgent'].map((
+                        chip,
+                      ) {
                         final isSel = _activeChip == chip;
                         return Padding(
                           padding: const EdgeInsets.only(right: 6),
@@ -192,10 +234,11 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 5),
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
                               decoration: BoxDecoration(
-                                color:
-                                    isSel ? primaryGreen : Colors.white,
+                                color: isSel ? primaryGreen : Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: border),
                               ),
@@ -203,8 +246,7 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                                 chip,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color:
-                                      isSel ? Colors.white : textDark,
+                                  color: isSel ? Colors.white : textDark,
                                 ),
                               ),
                             ),
@@ -219,15 +261,34 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                   // LIST
                   Expanded(
                     child: StreamBuilder<List<CaseModel>>(
-                      stream: _firestoreService.watchCases(
+                      stream: _caseRepository.watchCasesForCurrentUser(
                         status: effectiveStatus,
                         caseType: _filterCriteria.caseType,
                         handledBy: _filterCriteria.assignedTo,
                         searchQuery: _searchController.text,
+                        hearingDateFrom: _hearingDateRange?.start,
+                        hearingDateTo: _hearingDateRange?.end,
                         sortBy: _filterCriteria.sortBy,
-                        dateRange: _filterCriteria.customDateRange,
                       ),
                       builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: primaryGreen,
+                            ),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'Unable to load local cases: ${snapshot.error}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: textDark),
+                            ),
+                          );
+                        }
+
                         final cases = snapshot.data ?? [];
                         _latestCases = cases;
 
@@ -235,8 +296,10 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                           final hasActiveFilter =
                               _searchController.text.isNotEmpty ||
                               _activeChip != 'All' ||
+                              _filterCriteria.status != 'All' ||
                               _filterCriteria.caseType != 'All' ||
                               _filterCriteria.assignedTo != 'All' ||
+                              _filterCriteria.datePeriod != 'All' ||
                               _filterCriteria.customDateRange != null;
 
                           return Padding(
@@ -247,16 +310,17 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                                   : 'No cases yet',
                               subtitle: hasActiveFilter
                                   ? (_searchController.text.isNotEmpty
-                                      ? 'No results found'
-                                      : 'No cases match your filters')
+                                        ? 'No results found'
+                                        : 'No cases match your filters')
                                   : 'Get started by creating your first case docket',
                               icon: hasActiveFilter
                                   ? (_searchController.text.isNotEmpty
-                                      ? Icons.search_off_rounded
-                                      : Icons.folder_open_rounded)
+                                        ? Icons.search_off_rounded
+                                        : Icons.folder_open_rounded)
                                   : Icons.folder_open_rounded,
-                              actionLabel:
-                                  hasActiveFilter ? 'Reset' : 'Add Case',
+                              actionLabel: hasActiveFilter
+                                  ? 'Reset'
+                                  : 'Add Case',
                               onAction: () {
                                 if (hasActiveFilter) {
                                   setState(() {
@@ -275,12 +339,10 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
 
                         return ListView.builder(
                           itemCount: cases.length,
-                          padding:
-                              const EdgeInsets.fromLTRB(18, 4, 18, 90),
+                          padding: const EdgeInsets.fromLTRB(18, 4, 18, 90),
                           itemBuilder: (context, index) {
                             final c = cases[index];
-                            final isSel =
-                                _selectedCaseIds.contains(c.id);
+                            final isSel = _selectedCaseIds.contains(c.id);
 
                             return CaseCard(
                               key: ValueKey(c.id),
@@ -297,8 +359,8 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                               },
                               onOpenCase: () => _openCaseDetail(c),
                               onDiscussJuris: _openJuris,
-                              onToggleStar: () => _firestoreService
-                                  .toggleCaseStarred(c.id, !c.isStarred),
+                              onToggleStar: () => _caseRepository
+                                  .setCaseStarred(c.id, !c.isStarred),
                             );
                           },
                         );
@@ -347,8 +409,7 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
                     );
                   },
                   icon: const Icon(Icons.print),
-                  label: Text(
-                      'Print Selected (${_selectedCaseIds.length})'),
+                  label: Text('Print Selected (${_selectedCaseIds.length})'),
                 ),
               )
             : null,
@@ -358,8 +419,11 @@ class _AllCasesScreenState extends State<AllCasesScreen> {
           currentIndex: 1,
           onNavigate: (route) {
             if (route == '/home') {
-              AppNavController.instance
-                  .switchToHome(context, index: 0, route: '/home');
+              AppNavController.instance.switchToHome(
+                context,
+                index: 0,
+                route: '/home',
+              );
             } else if (route != '/cases') {
               Navigator.of(context).pushNamed(route);
             }
