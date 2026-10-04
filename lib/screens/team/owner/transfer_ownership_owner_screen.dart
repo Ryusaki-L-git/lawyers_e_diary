@@ -117,7 +117,12 @@ class _TransferOwnershipOwnerScreenState
                 stream: TeamService.instance.watchMembers(widget.team.id),
                 builder: (context, snapshot) {
                   final all = snapshot.data ?? [];
-                  final candidates = all.where((m) => m.role != TeamRole.owner).toList();
+                  final candidates = all
+                      .where(
+                        (m) =>
+                            m.hasFirebaseIdentity && m.role != TeamRole.owner,
+                      )
+                      .toList();
 
                   if (candidates.isEmpty) {
                     return Container(
@@ -214,4 +219,3 @@ class _TransferOwnershipOwnerScreenState
     );
   }
 }
-

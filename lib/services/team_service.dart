@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -14,8 +16,17 @@ class TeamService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   String? get currentUserId => _auth.currentUser?.uid;
-  String? get currentUserName =>
-      _auth.currentUser?.displayName ?? _auth.currentUser?.email?.split('@').first ?? 'Counsel';
+  String? get currentUserName => _auth.currentUser?.displayName ?? 'Counsel';
+
+  Future<String> _currentProfileName() async {
+    final uid = currentUserId;
+    if (uid == null) return currentUserName ?? 'Counsel';
+
+    final profile = await _db.collection('users').doc(uid).get();
+    final name = profile.data()?['name'] as String?;
+    if (name?.trim().isNotEmpty == true) return name!.trim();
+    return currentUserName ?? 'Counsel';
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Teams Querying & Watching
@@ -26,13 +37,78 @@ class TeamService {
     final uid = currentUserId;
     if (uid == null) return Stream.value([]);
 
-    // First query teams where current user is owner
-    return _db
+    final ownerTeams = _db
         .collection('teams')
         .where('ownerId', isEqualTo: uid)
         .where('isActive', isEqualTo: true)
-        .snapshots()
-        .map((snap) => snap.docs.map((d) => TeamModel.fromMap(d.id, d.data())).toList());
+        .snapshots();
+    final userMemberships = _db
+        .collectionGroup('members')
+        .where('userId', isEqualTo: uid)
+        .snapshots();
+    final userProfile = _db.collection('users').doc(uid).get();
+
+    return Stream<List<TeamModel>>.multi((controller) {
+      QuerySnapshot<Map<String, dynamic>>? ownerSnapshot;
+      QuerySnapshot<Map<String, dynamic>>? membershipSnapshot;
+      var generation = 0;
+
+      Future<void> emitTeams() async {
+        final owners = ownerSnapshot;
+        final memberships = membershipSnapshot;
+        if (owners == null || memberships == null) return;
+
+        final currentGeneration = ++generation;
+        final profilesExist = (await userProfile).exists;
+        final teams = <String, TeamModel>{
+          for (final doc in owners.docs)
+            doc.id: TeamModel.fromMap(doc.id, doc.data()),
+        };
+
+        if (profilesExist) {
+          for (final memberDoc in memberships.docs) {
+            if (memberDoc.id != uid ||
+                memberDoc.data()['userId'] != uid ||
+                memberDoc.data()['isActive'] != true) {
+              continue;
+            }
+            final teamRef = memberDoc.reference.parent.parent;
+            if (teamRef == null) continue;
+            final teamSnapshot = await teamRef.get();
+            final teamData = teamSnapshot.data();
+            if (teamSnapshot.exists && teamData?['isActive'] != false) {
+              teams[teamRef.id] = TeamModel.fromMap(teamRef.id, teamData!);
+            }
+          }
+        }
+
+        if (currentGeneration == generation) {
+          controller.add(teams.values.toList(growable: false));
+        }
+      }
+
+      void refreshTeams() {
+        unawaited(
+          emitTeams().catchError((Object error, StackTrace stackTrace) {
+            controller.addError(error, stackTrace);
+          }),
+        );
+      }
+
+      final ownerSubscription = ownerTeams.listen((snapshot) {
+        ownerSnapshot = snapshot;
+        refreshTeams();
+      }, onError: controller.addError);
+      final membershipSubscription = userMemberships.listen((snapshot) {
+        membershipSnapshot = snapshot;
+        refreshTeams();
+      }, onError: controller.addError);
+
+      controller.onCancel = () async {
+        await ownerSubscription.cancel();
+        await membershipSubscription.cancel();
+      };
+    });
   }
 
   /// Watch a specific team by ID.
@@ -55,9 +131,9 @@ class TeamService {
         .doc(uid)
         .snapshots()
         .map((snap) {
-      if (!snap.exists) return null;
-      return TeamMembership.fromMap(snap.id, teamId, snap.data()!);
-    });
+          if (!snap.exists) return null;
+          return TeamMembership.fromMap(snap.id, teamId, snap.data()!);
+        });
   }
 
   /// Watch all active members of a team.
@@ -68,8 +144,24 @@ class TeamService {
         .collection('members')
         .where('isActive', isEqualTo: true)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((d) => TeamMembership.fromMap(d.id, teamId, d.data())).toList());
+        .asyncMap((snap) async {
+          final members = await Future.wait(
+            snap.docs.map((memberDoc) async {
+              final profileSnapshot = await _db
+                  .collection('users')
+                  .doc(memberDoc.id)
+                  .get();
+              return TeamMembership.fromMap(
+                memberDoc.id,
+                teamId,
+                memberDoc.data(),
+                hasFirebaseIdentity: profileSnapshot.exists,
+                userProfile: profileSnapshot.data(),
+              );
+            }),
+          );
+          return members;
+        });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -87,6 +179,12 @@ class TeamService {
 
     final teamDoc = _db.collection('teams').doc();
     final teamId = teamDoc.id;
+    final ownerProfileSnapshot = await _db.collection('users').doc(uid).get();
+    final ownerProfile = ownerProfileSnapshot.data() ?? {};
+    final ownerName = (ownerProfile['name'] as String?)?.trim();
+    final ownerDisplayName = ownerName == null || ownerName.isEmpty
+        ? currentUserName
+        : ownerName;
 
     final batch = _db.batch();
 
@@ -108,10 +206,13 @@ class TeamService {
       'userId': uid,
       'teamId': teamId,
       'role': TeamRole.owner.value,
-      'displayName': currentUserName,
-      'email': _auth.currentUser?.email ?? '',
-      'phone': '',
-      'advocateType': 'Managing Partner',
+      'displayName': ownerDisplayName,
+      'email':
+          ownerProfile['email'] as String? ?? _auth.currentUser?.email ?? '',
+      'phone': ownerProfile['phone'] as String? ?? '',
+      'ledId': ownerProfile['ledId'] as String? ?? '',
+      'advocateType':
+          ownerProfile['advocateType'] as String? ?? 'Managing Partner',
       'isActive': true,
       'joinedAt': FieldValue.serverTimestamp(),
       'permissions': const MemberPermissions(
@@ -127,7 +228,7 @@ class TeamService {
     batch.set(actDoc, {
       'teamId': teamId,
       'actorId': uid,
-      'actorName': currentUserName,
+      'actorName': ownerDisplayName,
       'action': 'created_team',
       'targetTitle': name.trim(),
       'meta': {'firm': lawFirm.trim()},
@@ -145,9 +246,7 @@ class TeamService {
     String? lawFirm,
     String? description,
   }) async {
-    final data = <String, dynamic>{
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
+    final data = <String, dynamic>{'updatedAt': FieldValue.serverTimestamp()};
     if (name != null) data['name'] = name.trim();
     if (lawFirm != null) data['lawFirm'] = lawFirm.trim();
     if (description != null) data['description'] = description.trim();
@@ -168,6 +267,23 @@ class TeamService {
   }) async {
     final uid = currentUserId;
     if (uid == null) return;
+    if (newOwnerId.isEmpty) {
+      throw StateError('Ownership can only be transferred to an LED user.');
+    }
+    final newOwnerProfile = await _db.collection('users').doc(newOwnerId).get();
+    final newOwnerMembership = await _db
+        .collection('teams')
+        .doc(teamId)
+        .collection('members')
+        .doc(newOwnerId)
+        .get();
+    if (!newOwnerProfile.exists ||
+        !newOwnerMembership.exists ||
+        newOwnerMembership.data()?['isActive'] != true) {
+      throw StateError(
+        'Ownership can only be transferred to an active LED member.',
+      );
+    }
 
     final batch = _db.batch();
 
@@ -217,55 +333,167 @@ class TeamService {
   // Member Management & Invitations
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Invite/Add a member to the team directly.
-  Future<void> inviteMember({
+  /// Finds an existing LED profile by its assigned LED ID only.
+  Future<LedUserProfile?> findLedUserById(String ledId) async {
+    final normalizedLedId = ledId.trim();
+    if (normalizedLedId.isEmpty) {
+      throw ArgumentError.value(ledId, 'ledId', 'LED ID is required.');
+    }
+
+    final snapshot = await _db
+        .collection('users')
+        .where('ledId', isEqualTo: normalizedLedId)
+        .limit(2)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    if (snapshot.docs.length > 1) {
+      throw StateError('More than one LED profile uses this LED ID.');
+    }
+
+    final profile = LedUserProfile.fromMap(
+      snapshot.docs.single.id,
+      snapshot.docs.single.data(),
+    );
+    if (snapshot.docs.single.data()['profileCompleted'] != true) {
+      throw StateError('This LED account does not have a completed profile.');
+    }
+    if (profile.name.trim().isEmpty) {
+      throw StateError('The LED profile does not have a completed name.');
+    }
+    return profile;
+  }
+
+  /// Adds an existing LED user, keyed by the user's Firebase Auth UID.
+  Future<void> addExistingLedUser({
     required String teamId,
-    required String email,
-    required String displayName,
+    required LedUserProfile user,
     required TeamRole role,
-    String advocateType = 'Associate Advocate',
-    String phone = '',
     MemberPermissions permissions = const MemberPermissions(),
   }) async {
-    final uid = currentUserId;
-    // Generate an ID for the member slot
-    final memberId = email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toLowerCase();
+    final ownerUid = currentUserId;
+    if (ownerUid == null) {
+      throw StateError('Sign in before adding a team member.');
+    }
 
-    final batch = _db.batch();
+    final teamRef = _db.collection('teams').doc(teamId);
+    final profileRef = _db.collection('users').doc(user.uid);
+    final memberRef = teamRef.collection('members').doc(user.uid);
 
-    final memberDoc = _db.collection('teams').doc(teamId).collection('members').doc(memberId);
-    batch.set(memberDoc, {
-      'userId': memberId,
-      'teamId': teamId,
-      'role': role.value,
-      'displayName': displayName.trim(),
-      'email': email.trim().toLowerCase(),
-      'phone': phone.trim(),
-      'advocateType': advocateType,
-      'isActive': true,
-      'invitedBy': uid,
-      'joinedAt': FieldValue.serverTimestamp(),
-      'permissions': permissions.toMap(),
+    var wasActivated = false;
+    var addedMemberName = user.name.trim();
+    await _db.runTransaction<void>((transaction) async {
+      final profileSnapshot = await transaction.get(profileRef);
+      final memberSnapshot = await transaction.get(memberRef);
+      final teamSnapshot = await transaction.get(teamRef);
+
+      if (!profileSnapshot.exists) {
+        throw StateError('The selected LED profile no longer exists.');
+      }
+      if (!teamSnapshot.exists) {
+        throw StateError('The selected team no longer exists.');
+      }
+      if (teamSnapshot.data()?['ownerId'] == user.uid) {
+        throw StateError('The team owner is already on the team.');
+      }
+
+      final isAlreadyActive =
+          memberSnapshot.exists && memberSnapshot.data()?['isActive'] == true;
+      wasActivated = !isAlreadyActive;
+
+      final profileData = profileSnapshot.data()!;
+      final displayName = profileData['name'] as String? ?? '';
+      if (displayName.trim().isEmpty) {
+        throw StateError('The LED profile does not have a completed name.');
+      }
+      addedMemberName = displayName.trim();
+      if ((profileData['ledId'] as String?) != user.ledId) {
+        throw StateError('The selected LED profile has changed. Search again.');
+      }
+
+      final memberData = <String, dynamic>{
+        'userId': user.uid,
+        'teamId': teamId,
+        'role': role.value,
+        'displayName': displayName.trim(),
+        'email': profileData['email'] as String? ?? '',
+        'phone': profileData['phone'] as String? ?? '',
+        'ledId': profileData['ledId'] as String? ?? user.ledId,
+        'advocateType':
+            profileData['advocateType'] as String? ?? 'Associate Advocate',
+        'isActive': true,
+        'invitedBy': ownerUid,
+        'permissions': permissions.toMap(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (!isAlreadyActive) {
+        memberData['joinedAt'] = FieldValue.serverTimestamp();
+      }
+
+      transaction.set(memberRef, memberData, SetOptions(merge: true));
+      if (wasActivated) {
+        transaction.update(teamRef, {
+          'memberCount': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
     });
-
-    // Increment member count on team
-    batch.update(_db.collection('teams').doc(teamId), {
-      'memberCount': FieldValue.increment(1),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
 
     await logActivity(
       teamId: teamId,
       action: 'added_member',
-      targetTitle: displayName.trim(),
-      meta: {'memberName': displayName.trim(), 'role': role.label},
+      targetId: user.uid,
+      targetTitle: addedMemberName,
+      meta: {
+        'memberName': addedMemberName,
+        'memberUid': user.uid,
+        'role': role.label,
+      },
     );
   }
 
+  /// Builds share-ready copy only; no external message provider is called.
+  Future<String> buildTeamInvitationMessage({
+    required String teamId,
+    required String recipient,
+  }) async {
+    final ownerUid = currentUserId;
+    if (ownerUid == null) {
+      throw StateError('Sign in before preparing an invitation.');
+    }
+
+    final ownerProfile = await _db.collection('users').doc(ownerUid).get();
+    final storedOwnerName = ownerProfile.data()?['name'] as String?;
+    final ownerName = storedOwnerName?.trim().isNotEmpty == true
+        ? storedOwnerName!.trim()
+        : _auth.currentUser?.displayName?.trim().isNotEmpty == true
+        ? _auth.currentUser!.displayName!.trim()
+        : 'Team owner';
+    final ownerLedId = ownerProfile.data()?['ledId'] as String?;
+    final teamSnapshot = await _db.collection('teams').doc(teamId).get();
+    if (!teamSnapshot.exists) {
+      throw StateError('The selected team no longer exists.');
+    }
+    final teamName = teamSnapshot.data()?['name'] as String? ?? 'our team';
+    final lawFirm = teamSnapshot.data()?['lawFirm'] as String? ?? '';
+
+    return 'You are invited to join ${lawFirm.isEmpty ? teamName : '$lawFirm · $teamName'} '
+        'on Lawyer\'s E-Diary.\n\n'
+        'From: $ownerName${ownerLedId?.isNotEmpty == true ? ' (LED ID: $ownerLedId)' : ''}\n'
+        'Invitation for: $recipient\n'
+        'Team ID: $teamId\n\n'
+        'To join, install/open Lawyer\'s E-Diary, create or complete your LED profile, '
+        'then share your LED ID with $ownerName so they can add your verified profile '
+        'to this team.\n\n'
+        'App download: [Official download link is not configured]\n'
+        'Team join link: [No join link is configured; use Team ID $teamId]';
+  }
+
   /// Update role of a team member.
-  Future<void> updateMemberRole(String teamId, String memberId, TeamRole newRole) async {
+  Future<void> updateMemberRole(
+    String teamId,
+    String memberId,
+    TeamRole newRole,
+  ) async {
     await _db
         .collection('teams')
         .doc(teamId)
@@ -296,17 +524,35 @@ class TeamService {
   }
 
   /// Remove a member from the team.
-  Future<void> removeMember(String teamId, String memberId, String memberName) async {
-    final batch = _db.batch();
-    batch.update(
-      _db.collection('teams').doc(teamId).collection('members').doc(memberId),
-      {'isActive': false},
-    );
-    batch.update(_db.collection('teams').doc(teamId), {
-      'memberCount': FieldValue.increment(-1),
-      'updatedAt': FieldValue.serverTimestamp(),
+  Future<void> removeMember(
+    String teamId,
+    String memberId,
+    String memberName,
+  ) async {
+    final memberRef = _db
+        .collection('teams')
+        .doc(teamId)
+        .collection('members')
+        .doc(memberId);
+    final teamRef = _db.collection('teams').doc(teamId);
+    var wasActive = false;
+    await _db.runTransaction<void>((transaction) async {
+      wasActive = false;
+      final memberSnapshot = await transaction.get(memberRef);
+      final teamSnapshot = await transaction.get(teamRef);
+      if (!memberSnapshot.exists || !teamSnapshot.exists) {
+        throw StateError('The team member or team no longer exists.');
+      }
+      if (memberSnapshot.data()?['isActive'] != true) return;
+
+      wasActive = true;
+      transaction.update(memberRef, {'isActive': false});
+      transaction.update(teamRef, {
+        'memberCount': FieldValue.increment(-1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
-    await batch.commit();
+    if (!wasActive) return;
 
     await logActivity(
       teamId: teamId,
@@ -320,7 +566,7 @@ class TeamService {
   Future<void> leaveTeam(String teamId) async {
     final uid = currentUserId;
     if (uid == null) return;
-    await removeMember(teamId, uid, currentUserName ?? 'Member');
+    await removeMember(teamId, uid, await _currentProfileName());
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -333,8 +579,9 @@ class TeamService {
     String? assignedTo,
     bool unassignedOnly = false,
   }) {
-    Query<Map<String, dynamic>> query =
-        _db.collection('cases').where('teamId', isEqualTo: teamId);
+    Query<Map<String, dynamic>> query = _db
+        .collection('cases')
+        .where('teamId', isEqualTo: teamId);
 
     if (assignedTo != null && assignedTo.isNotEmpty) {
       query = query.where('assignedTo', isEqualTo: assignedTo);
@@ -355,6 +602,22 @@ class TeamService {
     required String memberId,
     required String memberName,
   }) async {
+    if (memberId.isEmpty) {
+      throw StateError('Cases can only be assigned to a verified LED user.');
+    }
+    final memberSnapshot = await _db
+        .collection('teams')
+        .doc(teamId)
+        .collection('members')
+        .doc(memberId)
+        .get();
+    final userSnapshot = await _db.collection('users').doc(memberId).get();
+    if (!memberSnapshot.exists ||
+        memberSnapshot.data()?['isActive'] != true ||
+        !userSnapshot.exists) {
+      throw StateError('Cases can only be assigned to an active LED member.');
+    }
+
     await _db.collection('cases').doc(caseId).update({
       'teamId': teamId,
       'assignedTo': memberId,
@@ -397,16 +660,20 @@ class TeamService {
 
   /// Stream of practice groups in a team.
   Stream<List<TeamGroup>> watchGroups(String teamId, {String? memberId}) {
-    Query<Map<String, dynamic>> query =
-        _db.collection('teams').doc(teamId).collection('groups');
+    Query<Map<String, dynamic>> query = _db
+        .collection('teams')
+        .doc(teamId)
+        .collection('groups');
 
     if (memberId != null) {
       query = query.where('memberIds', arrayContains: memberId);
     }
 
     return query.snapshots().map(
-          (snap) => snap.docs.map((d) => TeamGroup.fromMap(d.id, teamId, d.data())).toList(),
-        );
+      (snap) => snap.docs
+          .map((d) => TeamGroup.fromMap(d.id, teamId, d.data()))
+          .toList(),
+    );
   }
 
   /// Create a new practice group.
@@ -466,7 +733,11 @@ class TeamService {
   }
 
   /// Delete a practice group.
-  Future<void> deleteGroup(String teamId, String groupId, String groupName) async {
+  Future<void> deleteGroup(
+    String teamId,
+    String groupId,
+    String groupName,
+  ) async {
     await _db
         .collection('teams')
         .doc(teamId)
@@ -494,8 +765,11 @@ class TeamService {
         .orderBy('sentAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((d) => TeamMessage.fromMap(d.id, teamId, d.data())).toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => TeamMessage.fromMap(d.id, teamId, d.data()))
+              .toList(),
+        );
   }
 
   /// Send a message to team chat.
@@ -510,13 +784,18 @@ class TeamService {
   }) async {
     final uid = currentUserId;
     if (uid == null) return;
+    final senderName = await _currentProfileName();
 
-    final doc = _db.collection('teams').doc(teamId).collection('messages').doc();
+    final doc = _db
+        .collection('teams')
+        .doc(teamId)
+        .collection('messages')
+        .doc();
     final message = TeamMessage(
       id: doc.id,
       teamId: teamId,
       senderId: uid,
-      senderName: currentUserName ?? 'Counsel',
+      senderName: senderName,
       text: text.trim(),
       type: type,
       caseId: caseId,
@@ -533,7 +812,10 @@ class TeamService {
   // ─────────────────────────────────────────────────────────────────────────
 
   /// Stream audit activity logs.
-  Stream<List<TeamActivity>> watchActivityLogs(String teamId, {int limit = 50}) {
+  Stream<List<TeamActivity>> watchActivityLogs(
+    String teamId, {
+    int limit = 50,
+  }) {
     return _db
         .collection('teams')
         .doc(teamId)
@@ -541,8 +823,11 @@ class TeamService {
         .orderBy('timestamp', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((d) => TeamActivity.fromMap(d.id, teamId, d.data())).toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => TeamActivity.fromMap(d.id, teamId, d.data()))
+              .toList(),
+        );
   }
 
   /// Log an action to the team activity log.
@@ -555,11 +840,15 @@ class TeamService {
   }) async {
     try {
       final uid = currentUserId ?? 'system';
-      final doc = _db.collection('teams').doc(teamId).collection('activity').doc();
+      final doc = _db
+          .collection('teams')
+          .doc(teamId)
+          .collection('activity')
+          .doc();
       await doc.set({
         'teamId': teamId,
         'actorId': uid,
-        'actorName': currentUserName ?? 'Counsel',
+        'actorName': await _currentProfileName(),
         'action': action,
         // ignore: use_null_aware_elements
         if (targetId != null) 'targetId': targetId,

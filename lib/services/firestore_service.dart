@@ -246,15 +246,6 @@ class FirestoreService {
         );
       }
 
-      // Ensure fallback members matching the blueprint if Firestore has few users
-      if (members.isEmpty) {
-        return const [
-          TeamMemberModel(id: 'tm_1', name: 'Michael Scott', role: 'Associate Lawyer'),
-          TeamMemberModel(id: 'tm_2', name: 'Sarah Connor', role: 'Senior Lawyer'),
-          TeamMemberModel(id: 'tm_3', name: 'John Anderson', role: 'Partner'),
-          TeamMemberModel(id: 'tm_4', name: 'Jessica Pearson', role: 'Senior Partner'),
-        ];
-      }
       return members;
     });
   }

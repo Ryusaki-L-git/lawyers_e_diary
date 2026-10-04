@@ -142,7 +142,9 @@ class CasesAssignmentMatrixScreen extends StatelessWidget {
           return StreamBuilder<List<TeamMembership>>(
             stream: TeamService.instance.watchMembers(team.id),
             builder: (context, memberSnap) {
-              final members = memberSnap.data ?? [];
+              final members = (memberSnap.data ?? [])
+                  .where((member) => member.hasFirebaseIdentity)
+                  .toList();
 
               return ListView.separated(
                 padding: const EdgeInsets.all(16),

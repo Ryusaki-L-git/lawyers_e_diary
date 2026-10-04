@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../models/team_model.dart';
 import '../../../services/team_service.dart';
 import '../../../widgets/app_palette.dart';
 import '../widgets/team_header.dart';
 
-/// Screen 6 (Owner): Invite New Member
-/// Email/phone invitation dispatch with role pre-selection and permission boundaries.
+/// Screen 6 (Owner): Add an LED member or prepare an invitation for a new user.
 class InviteMemberScreen extends StatefulWidget {
   const InviteMemberScreen({super.key, required this.team});
 
@@ -18,10 +18,11 @@ class InviteMemberScreen extends StatefulWidget {
 
 class _InviteMemberScreenState extends State<InviteMemberScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _typeController = TextEditingController(text: 'Associate Advocate');
+  final _ledIdController = TextEditingController();
+  final _recipientController = TextEditingController();
+  LedUserProfile? _foundUser;
+  bool _inviteSomeone = false;
+  bool _inviteByEmail = true;
   TeamRole _selectedRole = TeamRole.member;
 
   bool _canCreateCases = true;
@@ -37,25 +38,47 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _typeController.dispose();
+    _ledIdController.dispose();
+    _recipientController.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _findLedUser() async {
+    final ledId = _ledIdController.text.trim();
+    if (ledId.isEmpty) {
+      _showMessage('Enter the user\'s LED ID.');
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final user = await TeamService.instance.findLedUserById(ledId);
+      if (!mounted) return;
+      setState(() => _foundUser = user);
+      _showMessage(
+        user == null
+            ? 'No LED profile found for that ID.'
+            : 'Verified LED profile found.',
+      );
+    } catch (error) {
+      if (mounted) _showMessage('Could not find that LED profile: $error');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _addLedUser() async {
+    final user = _foundUser;
+    if (user == null) {
+      _showMessage('Find a user by LED ID before adding them.');
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
-      await TeamService.instance.inviteMember(
+      await TeamService.instance.addExistingLedUser(
         teamId: widget.team.id,
-        email: _emailController.text.trim(),
-        displayName: _nameController.text.trim(),
+        user: user,
         role: _selectedRole,
-        advocateType: _typeController.text.trim(),
-        phone: _phoneController.text.trim(),
         permissions: MemberPermissions(
           canCreateCases: _canCreateCases,
           canDeleteCases: _canDeleteCases,
@@ -65,21 +88,52 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${_nameController.text.trim()} added to firm roster.'),
-          backgroundColor: const Color(0xFF1F3D2B),
-        ),
-      );
+      _showMessage('${user.name} added to the team.');
       Navigator.pop(context);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error adding member: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) _showMessage('Could not add this LED user: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _prepareInvitation() async {
+    final contact = _recipientController.text.trim();
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final message =
+          await TeamService.instance.buildTeamInvitationMessage(
+        teamId: widget.team.id,
+        recipient: contact,
+      );
+      await SharePlus.instance.share(
+        ShareParams(
+          text: message,
+          subject: 'Lawyer\'s E-Diary team invitation',
+        ),
+      );
+      if (mounted) {
+        _showMessage('Invitation text is ready to share. No team member was added.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showMessage('Could not prepare the invitation: $error', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+            isError ? Colors.red : const Color(0xFF1F3D2B),
+      ),
+    );
   }
 
   @override
@@ -87,7 +141,7 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: TeamHeader(
-        title: 'Invite Associate',
+        title: 'Add Team Member',
         subtitle: widget.team.name,
       ),
       body: SafeArea(
@@ -108,94 +162,168 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Full Legal Name *',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: _inputDecoration(hint: 'e.g. Adv. R. K. Sharma'),
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Name required' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      const Text(
-                        'Email Address *',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: _inputDecoration(hint: 'advocate@lawfirm.com'),
-                        validator: (v) => v == null || !v.contains('@') ? 'Valid email required' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      const Text(
-                        'Phone / Chamber Extension (Optional)',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: _inputDecoration(hint: '+91 98765 43210'),
-                      ),
-                      const SizedBox(height: 16),
-
-                      const Text(
-                        'Firm Designation / Title',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _typeController,
-                        decoration: _inputDecoration(hint: 'e.g. Senior Associate, Junior Counsel'),
-                      ),
-                      const SizedBox(height: 20),
-
-                      const Text(
-                        'Assign Team Role',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
+                      Wrap(
+                        spacing: 8,
                         children: [
-                          Expanded(
-                            child: _RoleChoiceCard(
-                              title: 'Member',
-                              desc: 'Assigned matters',
-                              isSelected: _selectedRole == TeamRole.member,
-                              onTap: () => setState(() {
-                                _selectedRole = TeamRole.member;
-                                _canDeleteCases = false;
-                                _canInviteMembers = false;
-                              }),
-                            ),
+                          ChoiceChip(
+                            label: const Text('Add existing LED user'),
+                            selected: !_inviteSomeone,
+                            onSelected: _isLoading
+                                ? null
+                                : (_) => setState(() {
+                                      _inviteSomeone = false;
+                                      _foundUser = null;
+                                    }),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _RoleChoiceCard(
-                              title: 'Leader',
-                              desc: 'Group & allocation oversight',
-                              isSelected: _selectedRole == TeamRole.leader,
-                              onTap: () => setState(() {
-                                _selectedRole = TeamRole.leader;
-                                _canInviteMembers = true;
-                              }),
-                            ),
+                          ChoiceChip(
+                            label: const Text('Invite someone to LED'),
+                            selected: _inviteSomeone,
+                            onSelected: _isLoading
+                                ? null
+                                : (_) => setState(() {
+                                      _inviteSomeone = true;
+                                      _foundUser = null;
+                                    }),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 20),
+                      if (!_inviteSomeone) ...[
+                        const Text(
+                          'LED ID',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _ledIdController,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: _inputDecoration(hint: 'e.g. 0043-2026'),
+                          onChanged: (_) => setState(() => _foundUser = null),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _findLedUser,
+                          icon: const Icon(Icons.search_rounded),
+                          label: const Text('Find LED user'),
+                        ),
+                        if (_foundUser != null) ...[
+                          const SizedBox(height: 12),
+                          _FoundLedUserCard(user: _foundUser!),
+                        ],
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Assign Team Role',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _RoleChoiceCard(
+                                title: 'Member',
+                                desc: 'Assigned matters',
+                                isSelected: _selectedRole == TeamRole.member,
+                                onTap: () => setState(() {
+                                  _selectedRole = TeamRole.member;
+                                  _canDeleteCases = false;
+                                  _canInviteMembers = false;
+                                }),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _RoleChoiceCard(
+                                title: 'Leader',
+                                desc: 'Group & allocation oversight',
+                                isSelected: _selectedRole == TeamRole.leader,
+                                onTap: () => setState(() {
+                                  _selectedRole = TeamRole.leader;
+                                  _canInviteMembers = true;
+                                }),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        const Text(
+                          'Invite by',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment(
+                              value: true,
+                              label: Text('Email'),
+                              icon: Icon(Icons.email_outlined),
+                            ),
+                            ButtonSegment(
+                              value: false,
+                              label: Text('Phone / WhatsApp'),
+                              icon: Icon(Icons.phone_outlined),
+                            ),
+                          ],
+                          selected: {_inviteByEmail},
+                          onSelectionChanged: _isLoading
+                              ? null
+                              : (selection) => setState(() {
+                                    _inviteByEmail = selection.first;
+                                    _recipientController.clear();
+                                  }),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _recipientController,
+                          keyboardType: _inviteByEmail
+                              ? TextInputType.emailAddress
+                              : TextInputType.phone,
+                          decoration: _inputDecoration(
+                            hint: _inviteByEmail
+                                ? 'advocate@lawfirm.com'
+                                : '+91 98765 43210',
+                          ),
+                          validator: (value) {
+                            if (!_inviteSomeone) return null;
+                            final contact = value?.trim() ?? '';
+                            if (_inviteByEmail) {
+                              return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                                      .hasMatch(contact)
+                                  ? null
+                                  : 'Enter a valid email address';
+                            }
+                            final digits =
+                                contact.replaceAll(RegExp(r'\D'), '');
+                            return digits.length >= 7
+                                ? null
+                                : 'Enter a valid phone number';
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'This prepares shareable invitation text only. It does not '
+                          'create a Team member record or send an email/SMS.',
+                          style: TextStyle(
+                            color: Color(0xFF6B665E),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 20),
 
                 // Permissions
-                Container(
+                if (!_inviteSomeone) Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: _card,
@@ -245,7 +373,11 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
                 SizedBox(
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _submit,
+                    onPressed: _isLoading
+                        ? null
+                        : _inviteSomeone
+                            ? _prepareInvitation
+                            : _addLedUser,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _black,
                       foregroundColor: Colors.white,
@@ -257,7 +389,15 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
                             height: 20,
                             child: CircularProgressIndicator(color: _gold, strokeWidth: 2),
                           )
-                        : const Text('Confirm & Add Member', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                        : Text(
+                            _inviteSomeone
+                                ? 'Prepare & Share Invitation'
+                                : 'Add LED User to Team',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -278,6 +418,44 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE5DFD7))),
       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE5DFD7))),
       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _gold)),
+    );
+  }
+}
+
+class _FoundLedUserCard extends StatelessWidget {
+  const _FoundLedUserCard({required this.user});
+
+  final LedUserProfile user;
+
+  @override
+  Widget build(BuildContext context) {
+    final details = <String>[
+      if (user.email.isNotEmpty) user.email,
+      if (user.phone.isNotEmpty) user.phone,
+      if (user.advocateType.isNotEmpty) user.advocateType,
+    ];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF7F0),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFB8D8BE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            user.name,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
+          const SizedBox(height: 4),
+          Text('LED ID: ${user.ledId}'),
+          if (details.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(details.join(' · ')),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -334,4 +512,3 @@ class _RoleChoiceCard extends StatelessWidget {
     );
   }
 }
-

@@ -173,7 +173,9 @@ class _CreateEditGroupScreenState extends State<CreateEditGroupScreen> {
                 StreamBuilder<List<TeamMembership>>(
                   stream: TeamService.instance.watchMembers(widget.team.id),
                   builder: (context, snapshot) {
-                    final members = snapshot.data ?? [];
+                    final members = (snapshot.data ?? [])
+                        .where((member) => member.hasFirebaseIdentity)
+                        .toList();
                     if (members.isEmpty) {
                       return const Padding(
                         padding: EdgeInsets.all(12),
@@ -255,4 +257,3 @@ class _CreateEditGroupScreenState extends State<CreateEditGroupScreen> {
     );
   }
 }
-

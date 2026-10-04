@@ -191,11 +191,12 @@ class CaseSyncResult {
 }
 
 class CaseSyncEngine {
-  CaseSyncEngine({
+  factory CaseSyncEngine({
     required CaseRepository repository,
     required CaseSyncDataSource dataSource,
-  }) : _repository = repository,
-       _dataSource = dataSource;
+  }) => CaseSyncEngine._(repository, dataSource);
+
+  CaseSyncEngine._(this._repository, this._dataSource);
 
   final CaseRepository _repository;
   final CaseSyncDataSource _dataSource;

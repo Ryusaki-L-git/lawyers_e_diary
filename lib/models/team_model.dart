@@ -122,14 +122,45 @@ class TeamModel {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TeamMembership  —  stored in  teams/{teamId}/members/{userId}
+// TeamMembership  —  stored in  teams/{teamId}/members/{memberDocumentId}
 // ─────────────────────────────────────────────────────────────────────────────
+
+class LedUserProfile {
+  const LedUserProfile({
+    required this.uid,
+    required this.ledId,
+    required this.name,
+    this.email = '',
+    this.phone = '',
+    this.advocateType = '',
+  });
+
+  final String uid;
+  final String ledId;
+  final String name;
+  final String email;
+  final String phone;
+  final String advocateType;
+
+  factory LedUserProfile.fromMap(String uid, Map<String, dynamic> data) {
+    return LedUserProfile(
+      uid: uid,
+      ledId: data['ledId'] as String? ?? '',
+      name: data['name'] as String? ?? '',
+      email: data['email'] as String? ?? '',
+      phone: data['phone'] as String? ?? '',
+      advocateType: data['advocateType'] as String? ?? '',
+    );
+  }
+}
 
 class TeamMembership {
   const TeamMembership({
     required this.userId,
     required this.teamId,
     required this.role,
+    this.membershipDocumentId,
+    this.hasFirebaseIdentity = true,
     this.displayName = '',
     this.email = '',
     this.phone = '',
@@ -140,9 +171,13 @@ class TeamMembership {
     this.permissions = const MemberPermissions(),
   });
 
+  /// Firebase Auth UID; empty for legacy memberships without a user profile.
   final String userId;
   final String teamId;
   final TeamRole role;
+  /// Actual document key retained for safe management of legacy membership docs.
+  final String? membershipDocumentId;
+  final bool hasFirebaseIdentity;
   final String displayName;
   final String email;
   final String phone;
@@ -159,15 +194,41 @@ class TeamMembership {
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
-  factory TeamMembership.fromMap(String userId, String teamId, Map<String, dynamic> data) {
+  factory TeamMembership.fromMap(
+    String documentId,
+    String teamId,
+    Map<String, dynamic> data, {
+    bool hasFirebaseIdentity = true,
+    Map<String, dynamic>? userProfile,
+  }) {
+    final userId = hasFirebaseIdentity ? documentId : '';
+    final storedName = data['displayName'] as String? ?? '';
+    final storedEmail = data['email'] as String? ?? '';
+    final storedPhone = data['phone'] as String? ?? '';
+    final storedAdvocateType = data['advocateType'] as String? ?? '';
+    final profileName = userProfile?['name'];
+    final profileEmail = userProfile?['email'];
+    final profilePhone = userProfile?['phone'];
+    final profileAdvocateType = userProfile?['advocateType'];
     return TeamMembership(
       userId: userId,
       teamId: teamId,
+      membershipDocumentId: documentId,
+      hasFirebaseIdentity: hasFirebaseIdentity,
       role: TeamRoleExt.fromString(data['role'] as String?),
-      displayName: data['displayName'] as String? ?? '',
-      email: data['email'] as String? ?? '',
-      phone: data['phone'] as String? ?? '',
-      advocateType: data['advocateType'] as String? ?? '',
+      displayName: hasFirebaseIdentity && profileName is String
+          ? profileName
+          : storedName,
+      email: hasFirebaseIdentity && profileEmail is String
+          ? profileEmail
+          : storedEmail,
+      phone: hasFirebaseIdentity && profilePhone is String
+          ? profilePhone
+          : storedPhone,
+      advocateType:
+          hasFirebaseIdentity && profileAdvocateType is String
+              ? profileAdvocateType
+              : storedAdvocateType,
       isActive: (data['isActive'] as bool?) ?? true,
       invitedBy: data['invitedBy'] as String?,
       joinedAt: (data['joinedAt'] as Timestamp?)?.toDate(),
@@ -176,7 +237,7 @@ class TeamMembership {
   }
 
   Map<String, dynamic> toMap() => {
-        'userId': userId,
+        if (userId.isNotEmpty) 'userId': userId,
         'teamId': teamId,
         'role': role.value,
         'displayName': displayName,
@@ -200,6 +261,8 @@ class TeamMembership {
       TeamMembership(
         userId: userId,
         teamId: teamId,
+        membershipDocumentId: membershipDocumentId,
+        hasFirebaseIdentity: hasFirebaseIdentity,
         role: role ?? this.role,
         displayName: displayName ?? this.displayName,
         email: email ?? this.email,
@@ -499,5 +562,3 @@ class TeamGroup {
         createdAt: createdAt,
       );
 }
-
-

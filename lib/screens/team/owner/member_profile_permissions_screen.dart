@@ -50,17 +50,19 @@ class _MemberProfilePermissionsScreenState
   Future<void> _saveChanges() async {
     setState(() => _isSaving = true);
     try {
+      final memberDocumentId =
+          widget.member.membershipDocumentId ?? widget.member.userId;
       if (_role != widget.member.role) {
         await TeamService.instance.updateMemberRole(
           widget.team.id,
-          widget.member.userId,
+          memberDocumentId,
           _role,
         );
       }
 
       await TeamService.instance.updateMemberPermissions(
         widget.team.id,
-        widget.member.userId,
+        memberDocumentId,
         MemberPermissions(
           canCreateCases: _canCreateCases,
           canDeleteCases: _canDeleteCases,
@@ -112,7 +114,7 @@ class _MemberProfilePermissionsScreenState
     if (confirm == true && mounted) {
       await TeamService.instance.removeMember(
         widget.team.id,
-        widget.member.userId,
+        widget.member.membershipDocumentId ?? widget.member.userId,
         widget.member.displayName,
       );
       if (mounted) Navigator.pop(context);
@@ -308,4 +310,3 @@ class _MemberProfilePermissionsScreenState
     );
   }
 }
-
