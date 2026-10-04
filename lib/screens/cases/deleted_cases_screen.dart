@@ -4,12 +4,12 @@ import '../../models/case_model.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/app_nav_controller.dart';
-import '../../widgets/calendar_components.dart';
+import '../../widgets/calendar_components.dart' hide CaseCard;
 import '../../widgets/case_card.dart';
 import '../../widgets/case_empty_state.dart';
 import 'case_detail_screen.dart';
 
-/// Deleted Cases Screen — soft-deleted docket with restore capability.
+/// Deleted Cases Screen â€” soft-deleted docket with restore capability.
 /// Back button is allowed (deep screen rule).
 class DeletedCasesScreen extends StatefulWidget {
   const DeletedCasesScreen({super.key});
@@ -28,8 +28,6 @@ class _DeletedCasesScreenState extends State<DeletedCasesScreen> {
   static const Color primaryGreen = Color(0xFF1F3D2B);
   static const Color textDark = Color(0xFF1A1A1A);
   static const Color textMuted = Color(0xFF6B665E);
-  static const Color border = Color(0xFFE5DFD7);
-  static const Color cardBg = Color(0xFFFFFFFF);
 
   void _toggleSelect(String id) {
     setState(() {

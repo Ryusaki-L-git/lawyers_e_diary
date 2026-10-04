@@ -10,7 +10,7 @@ import '../widgets/calendar_components.dart';
 
 abstract final class CaseActionsHelper {
   /// Opens WhatsApp using the universal web/deep link format:
-  /// https://wa.me/<number>?text=<encoded_message>
+  /// `https://wa.me/<number>?text=<encoded_message>`
   /// Never auto-sends; opens chat draft for confirmation.
   static Future<bool> openWhatsAppClient({
     required BuildContext context,
@@ -93,9 +93,11 @@ abstract final class CaseActionsHelper {
         : 'Case Summary: ${caseItem.caseTitle} (${caseItem.caseNumber}) at ${caseItem.courtName}. '
             'Next Date: $hearingText.';
 
-    await Share.share(
-      text,
-      subject: 'Case Summary: ${caseItem.caseTitle}',
+    await SharePlus.instance.share(
+      ShareParams(
+        text: text,
+        subject: 'Case Summary: ${caseItem.caseTitle}',
+      ),
     );
   }
 

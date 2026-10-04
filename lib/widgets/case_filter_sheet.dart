@@ -218,8 +218,11 @@ class _CaseFilterSheetState extends State<CaseFilterSheet> {
               setState(() {
                 if (val == 'Case Title') {
                   _sortBy = 'title';
-                } else if (val == 'Date Added') _sortBy = 'created';
-                else _sortBy = 'nextHearing';
+                } else if (val == 'Date Added') {
+                  _sortBy = 'created';
+                } else {
+                  _sortBy = 'nextHearing';
+                }
               });
             },
           ),

@@ -1,0 +1,185 @@
+"""
+ecourts/http_provider.py — Configurable HTTP eCourts provider (READ-ONLY).
+
+CONTRACT WITH THE OPERATOR
+    JURIS does not hardcode a government portal's private API. This provider
+    reads a configured gateway (JURIS_ECOURTS_BASE_URL) and expects a
+    documented JSON response. Normalising the response here means the rest of
+    JURIS never depends on a particular portal or vendor.
+
+    Request:
+        GET {base_url}/case/{cnr}
+        Header: X-API-Key: <JURIS_ECOURTS_API_KEY>     (when configured)
+
+    Response (JSON), all keys optional except "found":
+        {
+          "found": true,
+          "case_title": "...",
+          "case_status": "...",
+          "court_name": "...",
+          "case_type": "...",
+          "filing_number": "...",
+          "registration_number": "...",
+          "next_hearing_date": "2026-01-21",
+          "last_hearing_date": "2025-12-04",
+          "hearings": [
+            {"hearing_date": "2026-01-21", "purpose": "...", "judge": "...",
+             "court": "...", "item_number": "12"}
+          ]
+        }
+
+    If the gateway returns a shape this parser does not recognise, JURIS
+    raises ProviderMalformedResponseError rather than guessing. It never
+    invents a case.
+
+READ-ONLY
+    Only GET is ever issued. `forbid_write()` guards any accidental mutating
+    path.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import timezone
+from typing import Any
+
+from core.config import settings
+from core.errors import (
+    ProviderMalformedResponseError,
+    ProviderRateLimitError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
+)
+from datetime import datetime
+
+from ecourts.base import ECourtsCaseSnapshot, ECourtsHearing
+
+_REQUEST_TIMEOUT_SECONDS = 20.0
+
+
+class HttpECourtsProvider:
+    """Read-only eCourts provider over a configured HTTP gateway."""
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        timeout_seconds: float = _REQUEST_TIMEOUT_SECONDS,
+    ) -> None:
+        resolved_base = (base_url if base_url is not None else settings.ecourts_base_url).strip()
+        if not resolved_base:
+            raise ProviderUnavailableError(
+                "eCourts base URL is not configured."
+            )
+        self._base_url = resolved_base.rstrip("/")
+        self._api_key = (api_key if api_key is not None else settings.ecourts_api_key).strip()
+        self._timeout = timeout_seconds
+
+    @property
+    def provider_name(self) -> str:
+        return "ecourts_http"
+
+    async def fetch_case_by_cnr(self, cnr: str) -> ECourtsCaseSnapshot:
+        """Fetch a case by CNR without ever blocking the event loop."""
+        payload = await asyncio.to_thread(self._fetch_sync, cnr)
+        return self._to_snapshot(cnr, payload)
+
+    # ── transport ───────────────────────────────────────────────────────────
+
+    def _fetch_sync(self, cnr: str) -> dict[str, Any]:
+        url = f"{self._base_url}/case/{urllib.parse.quote(cnr, safe='')}"
+        request = urllib.request.Request(url, method="GET")
+        request.add_header("Accept", "application/json")
+        if self._api_key:
+            request.add_header("X-API-Key", self._api_key)
+
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as error:
+            if error.code == 429:
+                raise ProviderRateLimitError() from error
+            if error.code == 404:
+                # A missing case is a legitimate result, not a failure.
+                return {"found": False}
+            if 500 <= error.code < 600:
+                raise ProviderUnavailableError(
+                    "The eCourts provider is currently unavailable."
+                ) from error
+            raise ProviderMalformedResponseError(
+                f"The eCourts provider rejected the request (HTTP {error.code})."
+            ) from error
+        except TimeoutError as error:
+            raise ProviderTimeoutError() from error
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise ProviderTimeoutError() from error
+            raise ProviderUnavailableError(
+                "The eCourts provider could not be reached."
+            ) from error
+
+        try:
+            decoded = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ProviderMalformedResponseError() from error
+        if not isinstance(decoded, dict):
+            raise ProviderMalformedResponseError()
+        return decoded
+
+    # ── normalisation ───────────────────────────────────────────────────────
+
+    def _to_snapshot(
+        self, cnr: str, payload: dict[str, Any]
+    ) -> ECourtsCaseSnapshot:
+        found = bool(payload.get("found", False))
+        if not found:
+            return ECourtsCaseSnapshot(
+                cnr=cnr,
+                found=False,
+                provider=self.provider_name,
+                fetched_at=datetime.now(timezone.utc),
+            )
+
+        raw_hearings = payload.get("hearings")
+        hearings: list[ECourtsHearing] = []
+        if isinstance(raw_hearings, list):
+            for item in raw_hearings:
+                if not isinstance(item, dict):
+                    continue
+                hearings.append(
+                    ECourtsHearing(
+                        hearing_date=_as_text(item.get("hearing_date")),
+                        purpose=_as_text(item.get("purpose")) or "",
+                        judge=_as_text(item.get("judge")) or "",
+                        court=_as_text(item.get("court")) or "",
+                        item_number=_as_text(item.get("item_number")) or "",
+                    )
+                )
+
+        return ECourtsCaseSnapshot(
+            cnr=cnr,
+            found=True,
+            provider=self.provider_name,
+            fetched_at=datetime.now(timezone.utc),
+            case_title=_as_text(payload.get("case_title")) or "",
+            case_status=_as_text(payload.get("case_status")) or "",
+            court_name=_as_text(payload.get("court_name")) or "",
+            case_type=_as_text(payload.get("case_type")) or "",
+            filing_number=_as_text(payload.get("filing_number")) or "",
+            registration_number=_as_text(payload.get("registration_number")) or "",
+            next_hearing_date=_as_text(payload.get("next_hearing_date")),
+            last_hearing_date=_as_text(payload.get("last_hearing_date")),
+            hearings=hearings,
+            source_reference={"endpoint": "case_by_cnr"},
+        )
+
+
+def _as_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None

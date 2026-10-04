@@ -27,13 +27,52 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
   @override
   void initState() {
     super.initState();
-    final base = widget.initialDate ?? DateTime(2026, 1, 21);
+    final now = DateTime.now();
+    final base = widget.initialDate ?? DateTime(now.year, now.month, now.day);
     _displayedMonth = DateTime(base.year, base.month, 1);
     _selectedDate = base;
   }
 
   void _openNotifications() {
     Navigator.of(context).pushNamed('/notifications');
+  }
+
+  Future<void> _pickYear() async {
+    final currentYear = _displayedMonth.year;
+    final selectedYear = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: CalendarColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Select Year',
+          style: TextStyle(
+            fontFamily: 'serif',
+            fontWeight: FontWeight.w700,
+            color: CalendarColors.textDark,
+          ),
+        ),
+        content: SizedBox(
+          width: 280,
+          height: 300,
+          child: YearPicker(
+            firstDate: DateTime(2020),
+            lastDate: DateTime(2035),
+            selectedDate: _displayedMonth,
+            onChanged: (val) {
+              Navigator.pop(ctx, val.year);
+            },
+          ),
+        ),
+      ),
+    );
+
+    if (selectedYear != null && selectedYear != currentYear && mounted) {
+      setState(() {
+        _displayedMonth = DateTime(selectedYear, _displayedMonth.month, 1);
+        _selectedDate = DateTime(selectedYear, _selectedDate.month, _selectedDate.day);
+      });
+    }
   }
 
   void _navigateToList() {
@@ -76,12 +115,6 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
         _displayedMonth.month + 1,
         1,
       );
-    });
-  }
-
-  void _selectMonth(int monthNumber) {
-    setState(() {
-      _displayedMonth = DateTime(_displayedMonth.year, monthNumber, 1);
     });
   }
 
@@ -129,12 +162,33 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            yearString,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w500,
-                              color: CalendarColors.textMuted,
+                          InkWell(
+                            onTap: _pickYear,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    yearString,
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: CalendarColors.primaryGreen,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  const Icon(
+                                    Icons.arrow_drop_down_rounded,
+                                    size: 18,
+                                    color: CalendarColors.primaryGreen,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -245,19 +299,28 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
 
                           const SizedBox(height: 14),
 
-                          // Subsequent Months Accordions (matching PNG: February, March, April)
-                          MonthAccordionTile(
-                            monthName: 'February',
-                            onTap: () => _selectMonth(2),
-                          ),
-                          MonthAccordionTile(
-                            monthName: 'March',
-                            onTap: () => _selectMonth(3),
-                          ),
-                          MonthAccordionTile(
-                            monthName: 'April',
-                            onTap: () => _selectMonth(4),
-                          ),
+                          // Dynamically calculated subsequent 3 months
+                          for (int i = 1; i <= 3; i++) ...[
+                            () {
+                              final nextMonthDate = DateTime(
+                                _displayedMonth.year,
+                                _displayedMonth.month + i,
+                                1,
+                              );
+                              final mName = CalendarDateHelper.getMonthName(
+                                nextMonthDate.month,
+                              );
+                              return MonthAccordionTile(
+                                monthName: mName,
+                                onTap: () {
+                                  setState(() {
+                                    _displayedMonth = nextMonthDate;
+                                    _selectedDate = nextMonthDate;
+                                  });
+                                },
+                              );
+                            }(),
+                          ],
                         ],
                       );
                     },

@@ -26,12 +26,62 @@ class _CalendarListScreenState extends State<CalendarListScreen> {
   @override
   void initState() {
     super.initState();
-    final base = widget.initialDate ?? DateTime(2026, 1, 1);
+    final now = DateTime.now();
+    final base = widget.initialDate ?? DateTime(now.year, now.month, 1);
     _currentMonth = DateTime(base.year, base.month, 1);
   }
 
   void _openNotifications() {
     Navigator.of(context).pushNamed('/notifications');
+  }
+
+  void _prevMonth() {
+    setState(() {
+      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1, 1);
+    });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1);
+    });
+  }
+
+  Future<void> _pickYear() async {
+    final currentYear = _currentMonth.year;
+    final selectedYear = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: CalendarColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Select Year',
+          style: TextStyle(
+            fontFamily: 'serif',
+            fontWeight: FontWeight.w700,
+            color: CalendarColors.textDark,
+          ),
+        ),
+        content: SizedBox(
+          width: 280,
+          height: 300,
+          child: YearPicker(
+            firstDate: DateTime(2020),
+            lastDate: DateTime(2035),
+            selectedDate: _currentMonth,
+            onChanged: (val) {
+              Navigator.pop(ctx, val.year);
+            },
+          ),
+        ),
+      ),
+    );
+
+    if (selectedYear != null && selectedYear != currentYear && mounted) {
+      setState(() {
+        _currentMonth = DateTime(selectedYear, _currentMonth.month, 1);
+      });
+    }
   }
 
   void _openFullCalendar() {
@@ -95,12 +145,33 @@ class _CalendarListScreenState extends State<CalendarListScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            yearString,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w500,
-                              color: CalendarColors.textMuted,
+                          InkWell(
+                            onTap: _pickYear,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    yearString,
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: CalendarColors.primaryGreen,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  const Icon(
+                                    Icons.arrow_drop_down_rounded,
+                                    size: 18,
+                                    color: CalendarColors.primaryGreen,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -126,19 +197,50 @@ class _CalendarListScreenState extends State<CalendarListScreen> {
 
                 const SizedBox(height: 12),
 
-                // Month row and Grid/List view toggle icons
+                // Month row with previous/next navigators and Grid/List toggle icons
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 18),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        monthName,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: CalendarColors.textDark,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Previous month',
+                            onPressed: _prevMonth,
+                            icon: const Icon(
+                              Icons.chevron_left_rounded,
+                              size: 22,
+                              color: CalendarColors.textDark,
+                            ),
+                            splashRadius: 18,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            monthName,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: CalendarColors.textDark,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            tooltip: 'Next month',
+                            onPressed: _nextMonth,
+                            icon: const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 22,
+                              color: CalendarColors.textDark,
+                            ),
+                            splashRadius: 18,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
                       ),
                       Row(
                         mainAxisSize: MainAxisSize.min,

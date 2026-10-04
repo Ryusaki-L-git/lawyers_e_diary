@@ -5,7 +5,7 @@ import '../../services/firestore_service.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/app_nav_controller.dart';
 
-/// Transfer Case Screen — selects a firm lawyer to transfer a case to.
+/// Transfer Case Screen â€” selects a firm lawyer to transfer a case to.
 /// Back button is allowed (deep screen rule).
 class TransferCaseScreen extends StatefulWidget {
   const TransferCaseScreen({super.key, this.caseItem});
@@ -120,8 +120,8 @@ class _TransferCaseScreenState extends State<TransferCaseScreen> {
       if (widget.caseItem != null) {
         await _firestoreService.transferCase(
           caseId: widget.caseItem!.id,
-          toMemberId: _selectedMemberId,
-          toMemberName: _selectedMemberName,
+          targetLawyerId: _selectedMemberId,
+          targetLawyerName: _selectedMemberName,
         );
       }
       if (!mounted) return;
@@ -497,7 +497,7 @@ class _TransferCaseScreenState extends State<TransferCaseScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: chipColor.withOpacity(0.1),
+        color: chipColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(

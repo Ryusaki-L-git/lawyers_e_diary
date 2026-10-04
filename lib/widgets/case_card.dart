@@ -22,6 +22,7 @@ class CaseCard extends StatelessWidget {
     this.onOpenCase,
     this.onDiscussJuris,
     this.onRestore,
+    this.onToggleStar,
   });
 
   final CaseModel caseItem;
@@ -33,6 +34,7 @@ class CaseCard extends StatelessWidget {
   final VoidCallback? onOpenCase;
   final VoidCallback? onDiscussJuris;
   final VoidCallback? onRestore;
+  final VoidCallback? onToggleStar;
 
   static const Color primaryGreen = Color(0xFF1F3D2B);
   static const Color cardBackground = Color(0xFFFFFFFF);
@@ -103,8 +105,25 @@ class CaseCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     if (actionStyle != CaseCardActionStyle.deleted) ...[
                       _statusBadge(caseItem.status),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 2),
                     ],
+                    // Star toggle button
+                    if (onToggleStar != null && actionStyle != CaseCardActionStyle.deleted)
+                      GestureDetector(
+                        onTap: onToggleStar,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                          child: Icon(
+                            caseItem.isStarred
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            size: 20,
+                            color: caseItem.isStarred
+                                ? const Color(0xFFCCA046)
+                                : textMuted,
+                          ),
+                        ),
+                      ),
                     _buildThreeDotMenu(context),
                   ],
                 ),
